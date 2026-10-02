@@ -1,0 +1,131 @@
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from ctb.motor import analisar, sugerir
+
+
+def ids(pedido):
+    return {item["id"] for item in analisar(pedido)["infracoes"]}
+
+
+class Enquadramento(unittest.TestCase):
+    def test_relato_completo_de_abordagem(self):
+        relato = "Condutor não possui CNH, passageiro sem cinto, película no para-brisa e licenciamento vencido."
+        resultado = analisar({"relato": relato, "tipo_veiculo": "passeio"})
+        self.assertEqual(ids({"relato": relato}), {"162-i", "230-v", "230-xvi", "167-p"})
+        self.assertEqual(resultado["destino"]["tipo"], "remocao")
+        self.assertEqual(resultado["totais"]["pontos_condutor"], 0)
+        self.assertEqual(resultado["totais"]["pontos_passageiro"], 5)
+        valores = {item["id"]: item["valor_centavos"] for item in resultado["infracoes"]}
+        self.assertEqual(valores["162-i"], 29347 * 3)
+        self.assertEqual(valores["230-xvi"], 19523)
+        self.assertEqual(valores["167-p"], 19523)
+
+    def test_falta_de_porte_nao_e_falta_de_habilitacao(self):
+        self.assertEqual(ids({"relato": "O condutor esqueceu a CNH em casa."}), {"232"})
+
+    def test_sem_cnh_generico_pede_esclarecimento(self):
+        resultado = analisar({"relato": "Estava sem CNH."})
+        self.assertEqual(resultado["infracoes"], [])
+        self.assertTrue(any(d["id"] == "porte-ou-falta" for d in resultado["duvidas"]))
+
+    def test_recusa_do_bafometro(self):
+        resultado = analisar({"relato": "Recusou o bafômetro."})
+        self.assertEqual(ids({"relato": "Recusou o bafômetro."}), {"165-a"})
+        self.assertEqual(resultado["infracoes"][0]["valor_centavos"], 29347 * 10)
+        self.assertEqual(resultado["destino"]["tipo"], "habilitado")
+
+    def test_reincidencia_dobra_a_multa_de_alcool(self):
+        resultado = analisar({"relato": "Teste positivo no etilômetro.", "reincidencia_alcool": True})
+        self.assertEqual(resultado["infracoes"][0]["valor_centavos"], 29347 * 20)
+
+    def test_extintor_de_passeio_nao_gera_multa(self):
+        resultado = analisar({"relato": "Carro sem extintor.", "tipo_veiculo": "passeio"})
+        self.assertEqual(resultado["infracoes"], [])
+        self.assertTrue(resultado["orientacoes"])
+
+    def test_extintor_de_caminhao(self):
+        self.assertIn("230-ix-extintor", ids({"relato": "Caminhão sem extintor.", "tipo_veiculo": "carga"}))
+
+    def test_velocidade(self):
+        self.assertEqual(ids({"velocidade_medida": 70, "velocidade_maxima": 60}), {"218-i"})
+        self.assertEqual(ids({"velocidade_medida": 72, "velocidade_maxima": 60}), {"218-i"})
+        self.assertEqual(ids({"velocidade_medida": 80, "velocidade_maxima": 60}), {"218-ii"})
+        grave = analisar({"velocidade_medida": 100, "velocidade_maxima": 60})
+        self.assertEqual(grave["infracoes"][0]["id"], "218-iii")
+        self.assertEqual(grave["infracoes"][0]["valor_centavos"], 29347 * 3)
+        self.assertNotIn("remocao", grave["infracoes"][0]["medidas"])
+
+    def test_lampada_queimada_so_multa(self):
+        resultado = analisar({"relato": "Luz de freio queimada."})
+        self.assertEqual(resultado["infracoes"][0]["id"], "230-xxii")
+        self.assertEqual(resultado["destino"]["tipo"], "multa")
+
+    def test_cnh_vencida_ha_mais_de_30_dias(self):
+        self.assertEqual(ids({"relato": "CNH vencida há mais de 30 dias."}), {"162-v"})
+
+    def test_passageiro_sem_capacete_nao_autua_o_condutor(self):
+        self.assertEqual(ids({"relato": "Passageiro sem capacete na motocicleta.", "tipo_veiculo": "moto"}), {"244-ii"})
+
+    def test_motorista_sem_cinto_nao_vira_moto(self):
+        self.assertEqual(ids({"relato": "Motorista sem cinto."}), {"167-c"})
+
+    def test_excesso_de_peso(self):
+        resultado = analisar({"itens": ["231-v"], "excesso_kg": 500})
+        self.assertEqual(resultado["infracoes"][0]["valor_centavos"], 13016 + 3 * 532)
+
+    def test_quem_nao_tem_cnh_nao_leva_falta_de_porte(self):
+        resultado = analisar({"itens": ["162-i", "232"]})
+        self.assertEqual({item["id"] for item in resultado["infracoes"]}, {"162-i"})
+        self.assertTrue(resultado["alertas"])
+
+    def test_bebida_alcoolica_oferece_opcoes(self):
+        opcoes = {item["id"] for item in sugerir("bebida alcoolica")["opcoes"]}
+        self.assertIn("277", opcoes)
+        self.assertIn("165", opcoes)
+        self.assertIn("165-a", opcoes)
+        self.assertEqual(sugerir("bebida alcoolica")["pergunta"], "Bebida alcoólica. O que aconteceu?")
+
+    def test_cinto_oferece_condutor_e_passageiro(self):
+        opcoes = {item["id"] for item in sugerir("cinto")["opcoes"]}
+        self.assertIn("167-c", opcoes)
+        self.assertIn("167-p", opcoes)
+
+    def test_comeco_da_palavra_e_flexao_ainda_sugerem(self):
+        self.assertIn("165", {item["id"] for item in sugerir("bebi")["opcoes"]})
+        alcoolizado = {item["id"] for item in sugerir("estava alcoolizado")["opcoes"]}
+        self.assertTrue(alcoolizado & {"165", "277"})
+        sem_artigo = {item["id"] for item in sugerir("sem a cnh")["opcoes"]}
+        self.assertIn("162-i", sem_artigo)
+        self.assertIn("232", sem_artigo)
+
+    def test_ultrapassagem_em_faixa_continua(self):
+        opcoes = {item["id"] for item in sugerir("ultrapassagem em faixa continua")["opcoes"]}
+        self.assertIn("203-v", opcoes)
+        resultado = analisar({"itens": ["203-v"]})
+        carta = resultado["infracoes"][0]
+        self.assertEqual(carta["valor_centavos"], 29347 * 5)
+        self.assertEqual(carta["pontos"], 7)
+        self.assertNotIn("remocao", carta["medidas"])
+
+    def test_sem_cnh_e_alcool_oferecem_os_dois_blocos(self):
+        dado = sugerir("sem cnh e sob alcool")
+        grupos = {grupo["id"]: {item["id"] for item in grupo["opcoes"]} for grupo in dado["grupos"]}
+        self.assertIn("habilitacao", grupos)
+        self.assertIn("alcool", grupos)
+        self.assertIn("162-i", grupos["habilitacao"])
+        self.assertTrue(grupos["alcool"] & {"165", "165-a", "277"})
+        self.assertIn("mais de um achado", dado["pergunta"])
+
+    def test_sinais_de_alcool_nao_multam_ainda(self):
+        resultado = analisar({"relato": "Cheiro de álcool e fala alterada."})
+        self.assertEqual(resultado["infracoes"], [])
+        self.assertEqual(resultado["procedimentos"][0]["id"], "277")
+        self.assertEqual(resultado["destino"]["tipo"], "procedimento")
+
+
+if __name__ == "__main__":
+    unittest.main()
