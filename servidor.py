@@ -32,8 +32,12 @@ class Pedido(BaseHTTPRequestHandler):
             self._json(catalogo())
             return
         if caminho == "/api/sugerir":
-            consulta = parse_qs(urlparse(self.path).query).get("q", [""])[0]
-            self._json(sugerir(consulta))
+            qs = parse_qs(urlparse(self.path).query)
+            consulta = qs.get("q", [""])[0]
+            tipo = qs.get("tipo", ["passeio"])[0]
+            if tipo not in ("passeio", "moto", "carga", "coletivo"):
+                tipo = "passeio"
+            self._json(sugerir(consulta, tipo=tipo))
             return
         if caminho in ("/", "/index.html"):
             self._arquivo(WEB / "index.html")

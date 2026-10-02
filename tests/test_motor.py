@@ -89,6 +89,24 @@ class Enquadramento(unittest.TestCase):
         self.assertIn("165-a", opcoes)
         self.assertEqual(sugerir("bebida alcoolica")["pergunta"], "Bebida alcoólica. O que aconteceu?")
 
+    def test_palavra_do_checklist_encontra_a_opcao(self):
+        maos = {item["id"] for item in sugerir("mãos", tipo="moto")["opcoes"]}
+        self.assertIn("244-vii", maos)
+        self.assertNotIn("186-i", maos)
+        conduzia = {item["id"] for item in sugerir("conduzia", tipo="moto")["opcoes"]}
+        self.assertIn("244-vii", conduzia)
+
+    def test_tipo_de_veiculo_filtra_sugestoes(self):
+        carro = {item["id"] for item in sugerir("capacete", tipo="passeio")["opcoes"]}
+        self.assertNotIn("244-i", carro)
+        self.assertNotIn("244-vii", carro)
+        moto = {item["id"] for item in sugerir("capacete", tipo="moto")["opcoes"]}
+        self.assertIn("244-i", moto)
+        cinto_moto = {item["id"] for item in sugerir("cinto", tipo="moto")["opcoes"]}
+        self.assertNotIn("167-c", cinto_moto)
+        self.assertNotIn("167-p", cinto_moto)
+        self.assertEqual(ids({"relato": "Condutor sem cinto.", "tipo_veiculo": "moto", "itens": ["167-c"]}), set())
+
     def test_cinto_oferece_condutor_e_passageiro(self):
         opcoes = {item["id"] for item in sugerir("cinto")["opcoes"]}
         self.assertIn("167-c", opcoes)

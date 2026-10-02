@@ -511,10 +511,14 @@ def analisar(pedido: dict) -> dict:
         }
 
     ids = set(origens)
-    if tipo == "moto" and "167-c" in ids and origens["167-c"]["origem"] == "relato":
-        ids.discard("167-c")
-        nota_velocidade = (nota_velocidade + " " if nota_velocidade else "") + "Em motocicleta, falta de cinto do condutor não se enquadra no art. 167. O equipamento é o capacete."
+    fora = [codigo for codigo in ids if not _compativel(POR_ID[codigo], tipo)]
+    for codigo in fora:
+        ids.discard(codigo)
     alertas = suprimir_duplicados(ids)
+    if fora and tipo == "moto":
+        alertas.append("Cinto, cadeirinha e outros itens de carro não valem para motocicleta. O que não se aplica ficou de fora. Na moto, o equipamento do condutor é o capacete.")
+    elif fora:
+        alertas.append("Capacete, guidão e outros itens de motocicleta não valem para este veículo. O que não se aplica ficou de fora.")
 
     orientacoes = []
     if "nao-extintor" in do_texto or "nao-extintor" in marcados:
@@ -737,10 +741,39 @@ def _liga(palavra: str, alvo: str) -> int:
     return 0
 
 
-def _pontuar(foco: str) -> list[tuple[int, dict]]:
+SEM_MOTO = {
+    "167-c", "167-p", "168", "230-ii", "230-xvi", "230-xix", "250-i", "250-ii",
+    "231-vii", "231-iv", "231-v", "231-viii", "230-xx",
+}
+
+
+def _compativel(info: dict, tipo: str) -> bool:
+    """Capacete e guidão só na moto. Cinto e cadeirinha não existem na moto."""
+    if tipo == "moto":
+        return info["id"] not in SEM_MOTO and info["grupo"] != "carga"
+    return info["grupo"] != "moto"
+
+
+def _casa_texto(palavra: str, alvo: str) -> bool:
+    if len(alvo) < 3 or alvo in PARADAS:
+        return False
+    if palavra == alvo:
+        return True
+    if len(palavra) >= 4 and alvo.startswith(palavra):
+        return True
+    if len(alvo) >= 4 and len(palavra) >= 4 and palavra.startswith(alvo) and len(palavra) - len(alvo) <= 2:
+        return True
+    if len(palavra) >= 3 and alvo.startswith(palavra) and len(alvo) - len(palavra) <= 1:
+        return True
+    return False
+
+
+def _pontuar(foco: str, tipo: str = "passeio") -> list[tuple[int, dict]]:
     palavras = _palavras_uteis(foco)
     rank = []
     for info in INFRACOES:
+        if not _compativel(info, tipo):
+            continue
         pontos = 0
         for bruto_gatilho in GATILHOS.get(info["id"], []):
             gatilho = normalizar(bruto_gatilho)
@@ -756,6 +789,12 @@ def _pontuar(foco: str) -> list[tuple[int, dict]]:
             if any(len(parte) <= 3 for parte in partes) and not all(notas):
                 continue
             pontos += max(notas)
+        texto_opcao = normalizar(f"{info['checklist']} {info['titulo']}")
+        alvos = [parte for parte in texto_opcao.split() if len(parte) >= 3 and parte not in PARADAS]
+        for palavra in palavras:
+            if any(_casa_texto(palavra, alvo) for alvo in alvos):
+                pontos += 4
+                break
         if pontos:
             rank.append((pontos, info))
     return rank
@@ -771,13 +810,13 @@ def _opcao(pontos: int, info: dict) -> dict:
     }
 
 
-def sugerir(texto: str, limite: int = 6) -> dict:
+def sugerir(texto: str, limite: int = 6, tipo: str = "passeio") -> dict:
     """Oferece um bloco de opções para cada fato escrito, para o agente incluir mais de um."""
     bruto = normalizar(texto)
     trechos = _trechos(bruto)
     melhor: dict[str, tuple[int, dict, int]] = {}
     for indice, foco in enumerate(trechos):
-        for pontos, info in _pontuar(foco):
+        for pontos, info in _pontuar(foco, tipo):
             atual = melhor.get(info["id"])
             if not atual or pontos > atual[0]:
                 melhor[info["id"]] = (pontos, info, indice)

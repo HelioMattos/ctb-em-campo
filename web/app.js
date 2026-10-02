@@ -115,6 +115,29 @@ function desenharSugestoes(dado) {
   });
 }
 
+const SEM_MOTO = new Set(["167-c", "167-p", "168", "230-ii", "230-xvi", "230-xix", "250-i", "250-ii", "231-vii", "231-iv", "231-v", "231-viii", "230-xx"]);
+const SO_MOTO = new Set(["250-moto", "244-i", "244-ii", "244-iii", "244-v", "244-vii", "244-viii", "244-x", "244-xi"]);
+
+function tipoAtual() {
+  return new FormData(form).get("tipo_veiculo") || "passeio";
+}
+
+function compativelComTipo(id) {
+  if (tipoAtual() === "moto") return !SEM_MOTO.has(id);
+  return !SO_MOTO.has(id);
+}
+
+function tirarIncompativeis() {
+  let mudou = false;
+  for (const id of [...escolhidos.keys()]) {
+    if (!compativelComTipo(id)) {
+      escolhidos.delete(id);
+      mudou = true;
+    }
+  }
+  if (mudou) desenharEscolhidos();
+}
+
 async function buscarSugestoes() {
   const texto = form.relato.value.trim();
   const seq = ++sugestaoSeq;
@@ -124,7 +147,7 @@ async function buscarSugestoes() {
     return;
   }
   try {
-    const resposta = await fetch("/api/sugerir?q=" + encodeURIComponent(texto));
+    const resposta = await fetch("/api/sugerir?q=" + encodeURIComponent(texto) + "&tipo=" + encodeURIComponent(tipoAtual()));
     if (seq !== sugestaoSeq) return;
     if (!resposta.ok) return;
     desenharSugestoes(await resposta.json());
@@ -136,6 +159,13 @@ async function buscarSugestoes() {
 form.relato.addEventListener("input", () => {
   clearTimeout(timerSugestao);
   timerSugestao = setTimeout(buscarSugestoes, 180);
+});
+
+form.querySelectorAll("input[name=tipo_veiculo]").forEach((radio) => {
+  radio.addEventListener("change", () => {
+    tirarIncompativeis();
+    buscarSugestoes();
+  });
 });
 
 document.querySelector("#exemplo").addEventListener("click", () => {
