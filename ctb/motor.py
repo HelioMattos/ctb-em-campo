@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
+from pathlib import Path
 
 from ctb.base import FAIXAS_EXCESSO_PESO, GRUPOS, INFRACOES, POR_ID, PONTOS, VALOR_CENTAVOS
+
+ARQUIVO_APRENDIZADO = Path(__file__).with_name("aprendizado.json")
 
 
 def normalizar(texto: str) -> str:
@@ -31,6 +35,84 @@ def alguma(texto: str, frases: list[str]) -> str | None:
         if contem(texto, frase):
             return frase
     return None
+
+
+def palavras_juntas(texto: str, partes: list[str], folga: int = 4) -> bool:
+    """As palavras da frase estão na mesma sentença, mesmo com 'estava' no meio."""
+    uteis = [parte for parte in partes if len(parte) >= 3 and parte not in PARADAS]
+    if len(uteis) < 2:
+        return False
+    palavras = texto.split()
+    locais = []
+    for parte in uteis:
+        achados = [indice for indice, palavra in enumerate(palavras) if palavra == parte]
+        if not achados:
+            return False
+        locais.append(achados)
+    limite = folga + len(uteis) - 1
+
+    def cabe(nivel: int, escolha: list[int]) -> bool:
+        if nivel == len(locais):
+            return max(escolha) - min(escolha) <= limite
+        for indice in locais[nivel]:
+            if cabe(nivel + 1, escolha + [indice]):
+                return True
+        return False
+
+    return cabe(0, [])
+
+
+def alguma_ou_proxima(texto: str, frases: list[str], folga: int = 4) -> str | None:
+    achado = alguma(texto, frases)
+    if achado:
+        return achado
+    for frase in frases:
+        if palavras_juntas(texto, normalizar(frase).split(), folga):
+            return frase
+    return None
+
+
+def extrair_medidas(texto_original: str) -> dict:
+    """Lê velocidade e excesso de peso quando o agente escreveu os números no texto."""
+    texto = normalizar(texto_original)
+    saida: dict = {}
+    excesso = re.search(
+        r"(?:excesso de|sobrecarga de|acima do peso em)\s+(\d{2,6})\s*kg|(?<!\d)(\d{2,6})\s*kg\s+(?:acima|de excesso)",
+        texto,
+    )
+    if excesso:
+        saida["excesso_kg"] = int(next(grupo for grupo in excesso.groups() if grupo))
+
+    def numero_apos(padroes: list[str]) -> int | None:
+        for padrao in padroes:
+            achado = re.search(rf"(?<![a-z0-9]){padrao}\D{{0,8}}(\d{{2,3}})(?!\d)", texto)
+            if not achado:
+                continue
+            valor = int(achado.group(1))
+            if 20 <= valor <= 250:
+                return valor
+        return None
+
+    limite = numero_apos([
+        "limite de", "limite da via", "limite era", "limite e",
+        "velocidade maxima de", "maxima de", "maxima permitida",
+        "via de", "via limitada a", "limitada a", "placa de",
+    ])
+    medida = numero_apos([
+        "velocidade medida de", "velocidade medida", "velocidade de",
+        "aferido a", "aferida a", "radar marcou",
+        "trafegava a", "medido a",
+    ])
+    if medida is None or (limite is not None and medida == limite):
+        marcas = [int(n) for n in re.findall(r"(?<!\d)(\d{2,3})\s*km", texto)]
+        marcas = [n for n in marcas if 20 <= n <= 250 and n != limite]
+        if len(marcas) == 1:
+            medida = marcas[0]
+    if medida is not None:
+        saida["velocidade_medida"] = medida
+    if limite is not None:
+        saida["velocidade_maxima"] = limite
+    return saida
 
 
 def moeda(centavos: int) -> str:
@@ -80,12 +162,37 @@ def adicional_excesso_peso(excesso_kg: int) -> tuple[int, str]:
     )
 
 
+def corrigir_escrita(texto: str) -> str:
+    """Aceita erro comum de digitação sem mudar o artigo."""
+    trocas = {
+        "dianteita": "dianteira",
+        "dianteiara": "dianteira",
+        "traseita": "traseira",
+        "trazeira": "traseira",
+        "trasera": "traseira",
+        "alcolizado": "alcoolizado",
+        "alcolizada": "alcoolizada",
+        "alcoolisado": "alcoolizado",
+        "alcoolisada": "alcoolizada",
+        "alcoulizado": "alcoolizado",
+        "alcoulizada": "alcoolizada",
+        "enbriagado": "embriagado",
+        "enbriagada": "embriagada",
+    }
+    for errado, certo in trocas.items():
+        texto = re.sub(rf"(?<![a-z0-9]){errado}(?![a-z0-9])", certo, texto)
+    return texto
+
+
 def pelo_relato(texto_original: str, tipo: str) -> tuple[dict[str, str], list[dict]]:
-    texto = normalizar(texto_original)
+    texto = corrigir_escrita(normalizar(texto_original))
     achados: dict[str, str] = {}
     duvidas: list[dict] = []
     if not texto:
         return achados, duvidas
+
+    def alguma(texto_alvo: str, frases: list[str]) -> str | None:
+        return alguma_ou_proxima(texto_alvo, frases)
 
     def add(codigo: str, porque: str) -> None:
         achados.setdefault(codigo, porque)
@@ -98,9 +205,9 @@ def pelo_relato(texto_original: str, tipo: str) -> tuple[dict[str, str], list[di
     if alguma(texto, ["recusou entregar", "recusou apresentar o documento", "recusou mostrar o documento", "nao quis entregar a cnh", "nao entregou o documento"]):
         add("238", "recusa de entregar documento")
 
-    if alguma(texto, ["licenciamento vencido", "crlv vencido", "documento do veiculo vencido", "nao licenciado", "sem licenciamento", "licenciamento atrasado"]):
+    if alguma(texto, ["licenciamento vencido", "crlv vencido", "documento do veiculo vencido", "nao licenciado", "sem licenciamento", "licenciamento atrasado"]) or re.search(r"\blicenciamento\b(?:\s+[a-z0-9]+){0,5}\s+vencid", texto):
         add("230-v", "licenciamento vencido ou veículo não licenciado")
-    if alguma(texto, ["sem placa", "sem as placas", "nao tinha placa", "faltava a placa", "placa dianteira ausente", "sem a placa dianteira", "sem a placa traseira"]) and not alguma(texto, ["placa ilegivel", "placa sem leitura"]):
+    if alguma(texto, ["sem placa", "sem a placa", "sem as placas", "nao tinha placa", "nao tinha a placa", "faltava a placa", "faltava a placa dianteira", "placa dianteira ausente", "sem a placa dianteira", "sem a placa traseira"]) and not alguma(texto, ["placa ilegivel", "placa sem leitura"]):
         add("230-iv", "placa ausente")
     if alguma(texto, ["placa ilegivel", "placa apagada", "placa sem leitura", "nao da para ler a placa", "placa tampada", "placa encoberta", "placa amassada"]):
         add("230-vi", "placa sem legibilidade")
@@ -127,7 +234,7 @@ def pelo_relato(texto_original: str, tipo: str) -> tuple[dict[str, str], list[di
         add("163", "entrega da direção a quem não podia dirigir")
 
     fechou_habilitacao = any(k in achados for k in ("162-i", "162-ii", "162-v"))
-    if alguma(texto, ["nao possui cnh", "nao tem cnh", "nao e habilitado", "nao eh habilitado", "inabilitado", "sem possuir cnh", "sem possuir habilitacao", "nunca tirou cnh", "nunca teve cnh", "nao tem habilitacao", "sem ser habilitado"]):
+    if alguma(texto, ["nao possui cnh", "nao tem cnh", "nao possui habilitacao", "nao e habilitado", "nao eh habilitado", "inabilitado", "sem possuir cnh", "sem possuir habilitacao", "nunca tirou cnh", "nunca teve cnh", "nao tem habilitacao", "sem ser habilitado", "nunca foi habilitado"]):
         add("162-i", "não possui habilitação")
         fechou_habilitacao = True
     if alguma(texto, ["nao portava", "sem porte", "esqueceu a cnh", "esqueceu o documento", "deixou a cnh", "documento em casa", "cnh em casa", "nao estava com a cnh", "estava sem o documento", "sem portar a cnh", "sem portar o documento"]):
@@ -156,7 +263,7 @@ def pelo_relato(texto_original: str, tipo: str) -> tuple[dict[str, str], list[di
     # Álcool
     if alguma(texto, ["recusou o bafometro", "recusou o etilometro", "recusou o teste", "recusou soprar", "recusa do teste", "recusou o exame", "nao quis soprar"]):
         add("165-a", "recusa do teste")
-    elif alguma(texto, ["bafometro positivo", "etilometro positivo", "teste positivo", "alcool confirmado", "sob influencia de alcool", "alcoolizado", "embriagado", "bafometro deu", "etilometro acusou"]):
+    elif alguma(texto, ["bafometro positivo", "etilometro positivo", "teste positivo", "alcool confirmado", "sob influencia de alcool", "alcoolizado", "alcoolizada", "embriagado", "embriagada", "bafometro deu", "etilometro acusou"]):
         add("165", "influência de álcool confirmada")
     elif alguma(texto, ["cheiro de alcool", "halito de alcool", "sinais de embriaguez", "sinais de alteracao", "parece bebado", "suspeito de alcool"]):
         add("277", "sinais de alteração, sem teste ainda")
@@ -287,8 +394,98 @@ def pelo_relato(texto_original: str, tipo: str) -> tuple[dict[str, str], list[di
         add("231-viii", "transporte remunerado sem licença")
     if alguma(texto, ["escolar sem autorizacao", "transporte escolar irregular", "sem autorizacao de escolar"]):
         add("230-xx", "transporte escolar sem autorização")
+    if alguma(texto, ["sem curso", "curso vencido", "sem mopp", "sem o mopp", "curso de transporte", "curso especializado", "curso especifico"]):
+        add("162-vii", "curso obrigatório ausente")
+    if alguma(texto, ["proprietario deixou", "dono nao estava", "permitiu que dirigisse", "proprietario ausente"]):
+        add("164", "proprietário ausente permitiu a direção")
+    if alguma(texto, ["exame toxicologico vencido", "toxicologico vencido", "sem exame toxicologico", "exame toxicologico atrasado"]):
+        add("165-b-exame", "exame toxicológico vencido")
+    if alguma(texto, ["bloqueio policial", "furou a blitz", "avancou a blitz", "transpos o bloqueio"]):
+        add("210", "bloqueio policial")
+    if alguma(texto, ["fugiu da policia", "fugiu da blitz", "evadiu da policia"]):
+        add("278-fuga", "fuga da ação policial")
+    if alguma(texto, ["antirradar", "detector de radar", "esconde a placa", "placa coberta por pelicula reflexiva"]):
+        add("230-iii", "dispositivo que impede a fiscalização")
+    if alguma(texto, ["tacografo adulterado", "tacografo viciado", "cronotacografo defeituoso"]):
+        add("230-xiv", "tacógrafo irregular")
+    if alguma(texto, ["adesivo no parabrisa", "adesivo no para-brisa", "faixa no vidro"]) and "230-xvi" not in achados:
+        add("230-xv", "adesivo irregular no para-brisa")
+    if alguma(texto, ["sem descanso", "tempo de direcao estourado", "jornada estourada"]):
+        add("230-xxiii", "tempo de direção")
+    if alguma(texto, ["carga caindo", "derramando carga", "arrastando a carga", "carga solta na pista"]):
+        add("231-ii", "carga derramando ou arrastada")
+    if alguma(texto, ["autorizacao vencida", "autorizacao especial vencida", "aet vencida"]):
+        add("231-vi", "autorização especial vencida")
+    if alguma(texto, ["nao transferiu", "sem transferencia", "compra nao registrada"]):
+        add("233", "transferência fora do prazo")
+    if alguma(texto, ["no estribo", "no teto do carro", "parte externa", "pessoa no teto"]):
+        add("235", "parte externa")
+    if alguma(texto, ["saiu da retencao", "retirou o veiculo retido", "fugiu com o veiculo retido"]):
+        add("239", "veículo retido retirado sem permissão")
+    if alguma(texto, ["nao prestou socorro", "deixou a vitima", "sem prestar socorro"]):
+        add("176-i", "omissão de socorro")
+    if alguma(texto, ["bloqueou a via", "bloqueou a pista", "fechou a pista de proposito"]):
+        add("253-a", "interrupção deliberada da via")
+    if fala_de_moto and alguma(texto, ["rebocando", "moto rebocando", "rebocava outro"]):
+        add("244-vi", "motocicleta rebocando")
+    if fala_de_moto and alguma(texto, ["mototaxi irregular", "motofrete sem", "mototáxi irregular"]):
+        add("244-ix", "motofrete ou mototáxi irregular")
+    if alguma(texto, ["dirigia com uma mao", "so com uma mao", "com uma mao so"]) and "252-cel" not in achados:
+        add("252-v", "uma das mãos")
+
+    for codigo, porque in aplicar_aprendizado(texto).items():
+        add(codigo, porque)
 
     return achados, duvidas
+
+
+def ler_aprendizado() -> list:
+    if not ARQUIVO_APRENDIZADO.is_file():
+        return []
+    try:
+        dados = json.loads(ARQUIVO_APRENDIZADO.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return dados if isinstance(dados, list) else []
+
+
+def lembrar(relato: str, codigo: str) -> None:
+    """Guarda as palavras do texto que combinam com a ficha escolhida pelo agente."""
+    if codigo not in POR_ID:
+        return
+    texto = corrigir_escrita(normalizar(relato))
+    ficha = normalizar(" ".join([
+        POR_ID[codigo]["checklist"],
+        POR_ID[codigo]["titulo"],
+        *GATILHOS.get(codigo, []),
+    ]))
+    vocabulario = set(_palavras_uteis(ficha))
+    escolhidas = []
+    for palavra in _palavras_uteis(texto):
+        if palavra in escolhidas:
+            continue
+        if palavra in vocabulario or any(_liga(palavra, alvo) >= 4 for alvo in vocabulario):
+            escolhidas.append(palavra)
+    if len(escolhidas) < 2:
+        return
+    escolhidas = escolhidas[:6]
+    itens = [item for item in ler_aprendizado() if item.get("id") in POR_ID]
+    if any(item.get("id") == codigo and item.get("palavras") == escolhidas for item in itens):
+        return
+    itens.append({"id": codigo, "palavras": escolhidas})
+    ARQUIVO_APRENDIZADO.write_text(json.dumps(itens, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def aplicar_aprendizado(texto: str) -> dict[str, str]:
+    achados = {}
+    for item in ler_aprendizado():
+        codigo = item.get("id")
+        palavras = item.get("palavras") or []
+        if codigo not in POR_ID or not isinstance(palavras, list):
+            continue
+        if palavras_juntas(texto, [str(palavra) for palavra in palavras]):
+            achados[codigo] = "jeito de escrever que você já ensinou"
+    return achados
 
 
 def velocidade(medida: float | None, limite: float | None) -> dict | None:
@@ -322,25 +519,53 @@ def suprimir_duplicados(ids: set[str]) -> list[str]:
     if "244-i" in ids and "244-x" in ids:
         ids.discard("244-x")
         alertas.append("Sem capacete é o art. 244, I. O inciso da viseira só vale quando o capacete está na cabeça.")
+    if "252-cel" in ids and "252-v" in ids:
+        ids.discard("252-v")
+        alertas.append("Segurar ou manusear o telefone é o parágrafo único do art. 252, gravíssimo. O inciso V, de uma mão só, não se soma pelo mesmo gesto.")
+    if "165" in ids or "165-a" in ids or "165-b" in ids:
+        if "252-iii" in ids:
+            ids.discard("252-iii")
+            alertas.append("Álcool ou substância psicoativa ficam no art. 165 ou no art. 165-A. O art. 252, III, é incapacidade temporária sem esse fato.")
+    if "163" in ids and "164" in ids:
+        alertas.append("Quem estava no local e entregou a direção é o art. 163. O art. 164 é o proprietário ausente que permitiu. Os dois ficaram marcados: desmarque o que não aconteceu.")
+    if "231-iv" in ids and "231-vi" in ids:
+        alertas.append("Sem autorização de dimensão é o art. 231, IV. Autorização vencida ou descumprida é o inciso VI, e a medida passa a ser remoção.")
     if "230-xxii" in ids and "230-ix" in ids:
         alertas.append("Lâmpada queimada é o art. 230, XXII. O inciso IX fica só se faltar outro equipamento, como estepe ou triângulo.")
     return alertas
 
 
+# O MBFT/2022 manda depósito, sem o prazo de 15 dias, nestes casos de boa ordem
+# administrativa ou quando o licenciamento e a segurança não podem ser confirmados.
+DEPOSITO_SEM_PRAZO = {
+    "173", "175", "210", "230-i", "230-ii", "230-v", "230-xx", "231-vii", "231-viii",
+    "234", "238", "239", "253", "253-a", "278-fuga",
+}
+
+
 def destino_veiculo(cartas: list[dict]) -> dict:
     tags = set()
     insegura = False
+    ids = set()
     for carta in cartas:
         if carta.get("orientacao"):
             continue
         tags.update(carta["medidas"])
+        ids.add(carta["id"])
         if carta["circulacao_insegura"]:
             insegura = True
     if "remocao" in tags:
+        texto = "Há infração cuja medida é a remoção. O veículo não segue com quem foi abordado. Recolha a depósito e lavre todas as infrações, inclusive as que, sozinhas, seriam só multa."
+        if not ids & DEPOSITO_SEM_PRAZO:
+            texto += (
+                " A parte geral do MBFT/2022 abre uma exceção: se o veículo está licenciado, oferece segurança "
+                "e há condutor habilitado, ele pode sair com o CRLV-e recolhido e prazo de até 15 dias. "
+                "Sem essas três condições, o destino é o depósito."
+            )
         return {
             "tipo": "remocao",
             "titulo": "Remover o veículo",
-            "texto": "Há infração cuja medida é a remoção. O veículo não segue com quem foi abordado. Recolha a depósito e lavre todas as infrações, inclusive as que, sozinhas, seriam só multa.",
+            "texto": texto,
         }
     if insegura:
         return {
@@ -390,7 +615,7 @@ def montar_plano(cartas: list[dict], destino: dict, contexto: dict, alertas: lis
     reais = [c for c in cartas if not c.get("orientacao")]
     if any(c["comunicar_policia"] for c in reais):
         passos.append("Comunique a autoridade policial e preserve veículo e documentos. Não devolva documento ou placa com sinal de falsidade.")
-    if any(c["id"] in ("165", "165-a", "165-b", "162-i", "162-ii", "162-v") for c in reais):
+    if any(c["id"] in ("165", "165-a", "165-b", "162-i", "162-ii", "162-v", "162-vii", "170", "176-i", "210", "278-fuga") for c in reais):
         passos.append("Não deixe a pessoa abordada continuar dirigindo.")
     if any(c["id"] == "277" for c in cartas):
         passos.append("Ainda não lavre multa de álcool. Ofereça o teste do art. 277 e só então escolha o art. 165 (confirmado) ou o art. 165-A (recusa).")
@@ -431,7 +656,10 @@ def campos_do_auto(contexto: dict) -> dict:
 
 def carta_de(info: dict, origem: str, porque: str, reincidencia: bool, excesso_kg: int | None) -> dict:
     centavos, mult, nota = valor_base(info, reincidencia, excesso_kg)
-    pontos = 0 if info.get("orientacao") else PONTOS[info["natureza"]]
+    if info.get("orientacao") or info.get("lanca_pontos") is False:
+        pontos = 0
+    else:
+        pontos = PONTOS[info["natureza"]]
     return {
         "id": info["id"],
         "artigo_legivel": artigo_legivel(info),
@@ -467,6 +695,65 @@ def carta_de(info: dict, origem: str, porque: str, reincidencia: bool, excesso_k
     }
 
 
+def redigir_resposta(
+    relato: str,
+    reais: list[dict],
+    destino: dict,
+    duvidas: list[dict],
+    orientacoes: list[dict],
+    total: int,
+    pontos: int,
+    velocidade_incompleta: str,
+) -> str:
+    """Resposta em texto corrido, no mesmo caminho de uma pergunta feita a uma IA."""
+    paragrafos = []
+    if relato.strip():
+        paragrafos.append("Li o texto da abordagem e respondi só com o que ele confirma.")
+    elif reais:
+        paragrafos.append("Respondi com base nos achados marcados.")
+    else:
+        paragrafos.append("Ainda não há um texto para ler nem um achado marcado.")
+
+    if reais:
+        frases = []
+        for carta in reais:
+            if carta["id"] == "167-p" and carta["pontos"]:
+                pontos_txt = f" Os {carta['pontos']} pontos, se a pessoa for identificada e habilitada, ficam com o passageiro."
+            elif carta["lanca_pontos"] is True and carta["pontos"]:
+                pontos_txt = f" Lança {carta['pontos']} pontos."
+            else:
+                pontos_txt = " Não lança ponto na CNH do condutor."
+            if carta["origem"] == "agente":
+                evidencia = "Você marcou este achado."
+            else:
+                evidencia = f"Li isto: {carta['porque']}."
+            frases.append(
+                f"{carta['artigo_legivel']} — {carta['titulo']}. {evidencia} "
+                f"Multa de {carta['valor']}.{pontos_txt} Medida na via: {carta['medida_texto']}"
+            )
+        paragrafos.append(" ".join(frases))
+        paragrafos.append(destino["texto"])
+        paragrafos.append(
+            f"Fechamento: {len(reais)} infração(ões), {moeda(total)} em multas e {pontos} ponto(s) do condutor."
+        )
+    elif not duvidas and not orientacoes:
+        paragrafos.append(
+            "Não fechei multa com esse texto. Se alguma opção abaixo for a certa, clique nela. "
+            "Eu guardo esse jeito de escrever e, na próxima vez, reconheço sozinho."
+        )
+
+    if duvidas:
+        paragrafos.append(
+            "O texto ainda deixa mais de uma resposta possível, então não escolhi sozinho. "
+            + " ".join(duvida["pergunta"] for duvida in duvidas)
+        )
+    for item in orientacoes:
+        paragrafos.append(f"{item['titulo']}. {item['texto']}")
+    if velocidade_incompleta:
+        paragrafos.append(velocidade_incompleta)
+    return "\n\n".join(paragrafos)
+
+
 def analisar(pedido: dict) -> dict:
     relato = pedido.get("relato") or ""
     tipo = pedido.get("tipo_veiculo") or "passeio"
@@ -484,6 +771,19 @@ def analisar(pedido: dict) -> dict:
         limite_f = float(str(limite).replace(",", ".")) if limite not in (None, "") else None
     except ValueError:
         medida_f = limite_f = None
+    lidos = extrair_medidas(relato)
+    velocidade_lida = False
+    if medida_f is None and lidos.get("velocidade_medida") is not None:
+        medida_f = float(lidos["velocidade_medida"])
+        velocidade_lida = True
+    if limite_f is None and lidos.get("velocidade_maxima") is not None:
+        limite_f = float(lidos["velocidade_maxima"])
+        velocidade_lida = True
+    if excesso_kg is None and lidos.get("excesso_kg") is not None:
+        excesso_kg = lidos["excesso_kg"]
+    velocidade_incompleta = ""
+    if velocidade_lida and (medida_f is None or limite_f is None):
+        velocidade_incompleta = "O texto fala em velocidade, mas falta a medida ou o limite. Sem os dois números não fecho o art. 218."
 
     do_texto, duvidas = pelo_relato(relato, tipo)
     origens: dict[str, dict] = {}
@@ -494,6 +794,8 @@ def analisar(pedido: dict) -> dict:
     for codigo in marcados:
         if codigo in ("nao-autuar-cnh", "nao-extintor"):
             continue
+        if pedido.get("aprender") and codigo not in do_texto and codigo in POR_ID:
+            lembrar(relato, codigo)
         if codigo in origens:
             origens[codigo]["origem"] = "agente e relato"
         else:
@@ -506,7 +808,7 @@ def analisar(pedido: dict) -> dict:
     elif vel and vel.get("id"):
         percentual = round(vel["percentual"] * 100, 1)
         origens[vel["id"]] = {
-            "origem": "medição",
+            "origem": "relato" if velocidade_lida else "medição",
             "porque": f"{vel['medida']:g} km/h em limite de {vel['limite']:g} km/h ({percentual}% acima)",
         }
 
@@ -517,7 +819,7 @@ def analisar(pedido: dict) -> dict:
     alertas = suprimir_duplicados(ids)
     if fora and tipo == "moto":
         alertas.append("Cinto, cadeirinha e outros itens de carro não valem para motocicleta. O que não se aplica ficou de fora. Na moto, o equipamento do condutor é o capacete.")
-    elif fora:
+    elif any(POR_ID[codigo]["grupo"] == "moto" for codigo in fora):
         alertas.append("Capacete, guidão e outros itens de motocicleta não valem para este veículo. O que não se aplica ficou de fora.")
 
     orientacoes = []
@@ -568,10 +870,18 @@ def analisar(pedido: dict) -> dict:
     plano = montar_plano(cartas, destino, contexto, alertas)
     if nota_velocidade:
         alertas.append(nota_velocidade.strip())
+    if velocidade_incompleta:
+        alertas.append(velocidade_incompleta)
 
     resumo = _resumo(reais, destino, total, pontos)
+    resposta = redigir_resposta(relato, reais, destino, duvidas, orientacoes, total, pontos, velocidade_incompleta)
+    opcoes_texto = []
+    if relato.strip() and not reais and not procedimentos and not duvidas:
+        opcoes_texto = sugerir(relato, limite=4, tipo=tipo)["opcoes"][:4]
     return {
         "resumo": resumo,
+        "resposta": resposta,
+        "opcoes_texto": opcoes_texto,
         "plano": plano,
         "destino": destino,
         "infracoes": reais,
@@ -647,6 +957,31 @@ GATILHOS = {
     "165": ["bebida", "bebida alcoolica", "alcool", "alcoolica", "alcoolico", "alcoolizado", "alcoolizada", "bebendo", "bebeu", "cerveja", "cachaca", "pinga", "bafometro", "etilometro", "teste positivo", "lei seca", "embriagado", "embriaguez", "sob efeito", "sob alcool", "sob influencia"],
     "165-a": ["bebida", "bebida alcoolica", "alcool", "recusou", "recusa", "nao quis soprar", "bafometro", "etilometro", "lei seca"],
     "165-b": ["droga", "maconha", "cocaina", "entorpecente", "psicoativa", "substancia"],
+    "165-b-exame": ["toxicologico", "exame toxicologico", "exame vencido"],
+    "162-vii": ["sem curso", "curso especializado", "curso especifico", "mopp", "motofrete"],
+    "164": ["proprietario ausente", "permitiu dirigir", "dono nao estava"],
+    "166": ["sem condicao de dirigir", "passou mal", "nao tinha condicao"],
+    "170": ["ameacando", "ameacou o pedestre", "fechou o carro"],
+    "176-i": ["nao prestou socorro", "sem socorro", "deixou a vitima"],
+    "210": ["bloqueio policial", "furou a blitz", "transpos o bloqueio"],
+    "278-fuga": ["fugiu da policia", "fugiu da blitz", "evadiu"],
+    "230-iii": ["antirradar", "detector de radar", "esconde a placa"],
+    "230-viii": ["sem inspecao", "inspecao vencida", "inspecao de seguranca"],
+    "230-xiv": ["tacografo", "cronotacografo", "disco diagrama"],
+    "230-xv": ["adesivo no parabrisa", "adesivo no para-brisa", "faixa no vidro"],
+    "230-xxiii": ["tempo de direcao", "sem descanso", "jornada"],
+    "231-ii": ["carga caindo", "derramando", "arrastando a carga"],
+    "231-vi": ["autorizacao vencida", "autorizacao especial vencida"],
+    "233": ["nao transferiu", "compra nao registrada", "sem transferencia"],
+    "235": ["no estribo", "no teto", "parte externa"],
+    "239": ["saiu da retencao", "retirou o veiculo retido"],
+    "244-vi": ["rebocando", "moto rebocando"],
+    "244-ix": ["mototaxi", "motofrete", "transporte pago na moto"],
+    "252-ii": ["no colo", "entre os bracos", "cachorro no colo"],
+    "252-iii": ["passou mal", "sem condicao", "incapacidade"],
+    "252-v": ["uma mao", "com uma mao"],
+    "253": ["bloqueou a via", "bloqueio da pista", "impediu a passagem"],
+    "253-a": ["interromper a via", "manifestacao", "fechou a pista"],
     "167-c": ["cinto", "sem cinto", "cinto do motorista", "cinto do condutor"],
     "167-p": ["cinto", "sem cinto", "cinto do passageiro", "carona sem cinto"],
     "168": ["crianca", "cadeirinha", "bebe conforto", "assento", "menor no banco"],
@@ -742,13 +1077,17 @@ def _liga(palavra: str, alvo: str) -> int:
 
 
 SEM_MOTO = {
-    "167-c", "167-p", "168", "230-ii", "230-xvi", "230-xix", "250-i", "250-ii",
-    "231-vii", "231-iv", "231-v", "231-viii", "230-xx",
+    "167-c", "167-p", "168", "230-ii", "230-xvi", "230-xix", "230-xv", "250-i", "250-ii",
+    "231-vii", "231-iv", "231-v", "231-viii", "230-xx", "252-ii", "252-v",
 }
+
+SO_PESADO = {"165-b-exame", "230-xiv", "230-xxiii"}
 
 
 def _compativel(info: dict, tipo: str) -> bool:
     """Capacete e guidão só na moto. Cinto e cadeirinha não existem na moto."""
+    if info["id"] in SO_PESADO and tipo not in ("carga", "coletivo"):
+        return False
     if tipo == "moto":
         return info["id"] not in SEM_MOTO and info["grupo"] != "carga"
     return info["grupo"] != "moto"
@@ -812,7 +1151,7 @@ def _opcao(pontos: int, info: dict) -> dict:
 
 def sugerir(texto: str, limite: int = 6, tipo: str = "passeio") -> dict:
     """Oferece um bloco de opções para cada fato escrito, para o agente incluir mais de um."""
-    bruto = normalizar(texto)
+    bruto = corrigir_escrita(normalizar(texto))
     trechos = _trechos(bruto)
     melhor: dict[str, tuple[int, dict, int]] = {}
     for indice, foco in enumerate(trechos):
