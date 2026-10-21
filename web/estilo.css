@@ -140,8 +140,17 @@ button { font: inherit; cursor: pointer; border-radius: 12px; border: 0; }
 .principal { background: var(--marinho); color: white; font-weight: 700; flex: 1; }
 .principal:hover { background: var(--marinho-2); }
 .principal:disabled { background: #8d9aa3; cursor: not-allowed; }
-.aviso-botao { margin: 8px 0 0; color: #6d6256; font-size: 14px; }
+.aviso-botao, .dica { margin: 8px 0 0; color: #6d6256; font-size: 14px; line-height: 1.45; }
 .aviso-botao[hidden] { display: none; }
+.leitura {
+  margin: 12px;
+  padding: 16px 18px 8px;
+  background: #f7f1e6;
+  border-radius: 14px;
+  line-height: 1.55;
+}
+.leitura h2 { margin: 0 0 8px; font-family: Georgia, "Times New Roman", serif; font-size: 26px; }
+.leitura p { margin: 0 0 12px; }
 .secundario, .texto, .opcao { background: transparent; color: var(--marinho); }
 .secundario { border: 1px solid var(--marinho); }
 .texto { border: 0; padding: 6px 0 0; text-decoration: underline; font-size: 14px; }

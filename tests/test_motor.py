@@ -138,6 +138,88 @@ class Enquadramento(unittest.TestCase):
         self.assertTrue(grupos["alcool"] & {"165", "165-a", "277"})
         self.assertIn("mais de um achado", dado["pergunta"])
 
+    def test_substancia_psicoativa_continua_no_artigo_165(self):
+        resultado = analisar({"relato": "Exame de droga positivo."})
+        carta = resultado["infracoes"][0]
+        self.assertEqual(carta["id"], "165-b")
+        self.assertEqual(carta["artigo_legivel"], "art. 165")
+        self.assertEqual(carta["valor_centavos"], 29347 * 10)
+        self.assertEqual(carta["pontos"], 0)
+
+    def test_artigo_165_b_e_o_exame_toxicologico(self):
+        resultado = analisar({
+            "relato": "Exame toxicológico vencido há mais de 30 dias.",
+            "tipo_veiculo": "carga",
+        })
+        carta = resultado["infracoes"][0]
+        self.assertEqual(carta["id"], "165-b-exame")
+        self.assertEqual(carta["artigo_legivel"], "art. 165-B")
+        self.assertEqual(carta["valor_centavos"], 29347 * 5)
+        self.assertEqual(resultado["destino"]["tipo"], "multa")
+        self.assertEqual(ids({"relato": "Exame toxicológico vencido.", "tipo_veiculo": "passeio"}), set())
+
+    def test_bloqueio_policial_remove_sem_prazo(self):
+        resultado = analisar({"relato": "Transpôs o bloqueio policial."})
+        self.assertEqual(resultado["infracoes"][0]["id"], "210")
+        self.assertEqual(resultado["destino"]["tipo"], "remocao")
+        self.assertNotIn("15 dias", resultado["destino"]["texto"])
+
+    def test_celular_nao_soma_o_inciso_de_uma_mao(self):
+        resultado = analisar({"itens": ["252-cel", "252-v"]})
+        self.assertEqual({item["id"] for item in resultado["infracoes"]}, {"252-cel"})
+        self.assertTrue(resultado["alertas"])
+
+    def test_texto_livre_le_o_relato_e_responde(self):
+        relato = (
+            "Abordei um carro de passeio. O condutor não possui habilitação. "
+            "O passageiro estava sem cinto. Havia película no para-brisa e "
+            "o licenciamento do veículo estava vencido. Trafegava a 80 km/h numa via de 60."
+        )
+        resultado = analisar({"relato": relato, "tipo_veiculo": "passeio"})
+        self.assertEqual(
+            {item["id"] for item in resultado["infracoes"]},
+            {"162-i", "167-p", "230-xvi", "230-v", "218-ii"},
+        )
+        self.assertIn("Li o texto", resultado["resposta"])
+        self.assertIn("art. 162, I", resultado["resposta"])
+        self.assertIn("art. 218, II", resultado["resposta"])
+        self.assertNotIn("fx-", resultado["resposta"])
+
+    def test_farol_queimado_e_placa_dianteira_mesmo_com_erro(self):
+        resultado = analisar({
+            "relato": "abordei um carro com a farol queimado e estava sem a placa dianteita",
+        })
+        self.assertEqual(
+            {item["id"] for item in resultado["infracoes"]},
+            {"230-xxii", "230-iv"},
+        )
+        self.assertEqual(resultado["destino"]["tipo"], "remocao")
+        self.assertIn("art. 230, IV", resultado["resposta"])
+        self.assertIn("art. 230, XXII", resultado["resposta"])
+
+    def test_pneu_careca_com_palavras_no_meio(self):
+        resultado = analisar({
+            "relato": "o carro foi parado e constatou que o pneu estava careca",
+        })
+        self.assertEqual({item["id"] for item in resultado["infracoes"]}, {"230-xviii"})
+        self.assertEqual(resultado["infracoes"][0]["pontos"], 0)
+        self.assertEqual(resultado["destino"]["tipo"], "remocao")
+        self.assertIn("art. 230, XVIII", resultado["resposta"])
+
+    def test_dirigindo_alcoolizado_mesmo_com_erro_de_escrita(self):
+        resultado = analisar({"relato": "motorias foi pego dirigindo alcolizado"})
+        self.assertEqual({item["id"] for item in resultado["infracoes"]}, {"165"})
+        carta = resultado["infracoes"][0]
+        self.assertEqual(carta["valor_centavos"], 29347 * 10)
+        self.assertEqual(carta["pontos"], 0)
+        self.assertEqual(resultado["destino"]["tipo"], "habilitado")
+        self.assertIn("art. 165", resultado["resposta"])
+
+    def test_texto_ambiguo_nao_escolhe_sozinho(self):
+        resultado = analisar({"relato": "O condutor estava sem CNH."})
+        self.assertEqual(resultado["infracoes"], [])
+        self.assertIn("não escolhi sozinho", resultado["resposta"])
+
     def test_sinais_de_alcool_nao_multam_ainda(self):
         resultado = analisar({"relato": "Cheiro de álcool e fala alterada."})
         self.assertEqual(resultado["infracoes"], [])

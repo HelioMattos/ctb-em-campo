@@ -9,8 +9,22 @@ let ultimaSugestao = { grupos: [], opcoes: [], pergunta: "" };
 let timerSugestao = 0;
 let sugestaoSeq = 0;
 let analiseSeq = 0;
+let ensinar = false;
 
 const EXEMPLO = "Condutor não possui CNH, passageiro sem cinto, película no para-brisa e licenciamento vencido.";
+const EXEMPLO_TEXTO = "Abordei um carro de passeio. O condutor não possui CNH. O passageiro estava sem cinto. Havia película no para-brisa e o licenciamento do veículo estava vencido.";
+const PASSOS = {
+  texto: [
+    "Escreva o que aconteceu, como você contaria o fato.",
+    "O sistema lê o texto, separa o que dá para confirmar e responde com artigo, multa e medida.",
+    "Preencha local, data e hora, placa e matrícula. A resposta sai ao clicar em Analisar o texto.",
+  ],
+  palavras: [
+    "Escreva palavras do que viu, como sem CNH ou sem cinto.",
+    "Quando aparecerem opções, inclua cada achado. Pode ser mais de um.",
+    "Preencha local, data e hora, placa e matrícula. O resultado sai ao clicar em Ver o que fazer.",
+  ],
+};
 
 function esc(valor) {
   return String(valor ?? "").replace(/[&<>"']/g, (c) => ({
@@ -26,12 +40,47 @@ function horaLocal() {
 
 form.data_hora.value = horaLocal();
 
+function modoTexto() {
+  return form.modo.value === "texto";
+}
+
 function marcados() {
   return [...escolhidos.keys()];
 }
 
+function rotuloBotao() {
+  return modoTexto() ? "Analisar o texto" : "Ver o que fazer";
+}
+
+function aplicarModo(limparEscolhas) {
+  const texto = modoTexto();
+  const passos = document.querySelector("#passos");
+  passos.innerHTML = PASSOS[texto ? "texto" : "palavras"].map((item) => `<li>${item}</li>`).join("");
+  document.querySelector("#rotulo-relato").textContent = texto ? "Texto da abordagem" : "Palavras-chave";
+  form.relato.rows = texto ? 8 : 4;
+  form.relato.placeholder = texto
+    ? "Conte o que viu. Ex.: o condutor não possui CNH, o passageiro estava sem cinto e o licenciamento do veículo estava vencido."
+    : "Comece a escrever. Ex.: sem CNH e sob efeito de álcool";
+  document.querySelector("#dica-modo").textContent = texto
+    ? "O sistema lê esse texto e responde. Você não precisa escolher o artigo."
+    : "As opções aparecem enquanto você escreve. Inclua cada achado que aconteceu.";
+  if (texto) {
+    sugestoesEl.hidden = true;
+    sugestoesEl.innerHTML = "";
+    if (limparEscolhas) {
+      escolhidos.clear();
+      desenharEscolhidos();
+    }
+  } else {
+    buscarSugestoes();
+  }
+  atualizarBotao();
+}
+
 function pedido() {
   const dados = new FormData(form);
+  const agora = ensinar;
+  ensinar = false;
   return {
     relato: dados.get("relato") || "",
     tipo_veiculo: dados.get("tipo_veiculo"),
@@ -40,6 +89,7 @@ function pedido() {
     velocidade_medida: dados.get("velocidade_medida"),
     velocidade_maxima: dados.get("velocidade_maxima"),
     excesso_kg: dados.get("excesso_kg"),
+    aprender: agora && modoTexto(),
     contexto: {
       local: dados.get("local"),
       data_hora: dados.get("data_hora"),
@@ -139,6 +189,7 @@ function tirarIncompativeis() {
 }
 
 async function buscarSugestoes() {
+  if (modoTexto()) return;
   const texto = form.relato.value.trim();
   const seq = ++sugestaoSeq;
   if (texto.length < 3) {
@@ -168,8 +219,12 @@ form.querySelectorAll("input[name=tipo_veiculo]").forEach((radio) => {
   });
 });
 
+form.querySelectorAll("input[name=modo]").forEach((radio) => {
+  radio.addEventListener("change", () => aplicarModo(true));
+});
+
 document.querySelector("#exemplo").addEventListener("click", () => {
-  form.relato.value = EXEMPLO;
+  form.relato.value = modoTexto() ? EXEMPLO_TEXTO : EXEMPLO;
   form.relato.focus();
   buscarSugestoes();
 });
@@ -182,8 +237,8 @@ document.querySelector("#limpar").addEventListener("click", () => {
   sugestoesEl.hidden = true;
   form.data_hora.value = horaLocal();
   form.querySelector("input[value=passeio]").checked = true;
-  resultadoEl.innerHTML = `<div class="vazio"><h2>A conduta aparece aqui</h2><p>Ela aparece depois de Ver o que fazer, com local, data e hora, placa e matrícula preenchidos.</p></div>`;
-  atualizarBotao();
+  resultadoEl.innerHTML = `<div class="vazio"><h2>A resposta aparece aqui</h2><p>Escreva o texto ou marque as palavras-chave. Preencha local, data e hora, placa e matrícula.</p></div>`;
+  aplicarModo(false);
 });
 
 const faltaDadosEl = document.querySelector("#falta-dados");
@@ -198,7 +253,7 @@ function atualizarBotao() {
   const ok = camposObrigatoriosOk();
   botao.disabled = consultando || !ok;
   faltaDadosEl.hidden = ok || consultando;
-  if (!consultando) botao.textContent = "Ver o que fazer";
+  if (!consultando) botao.textContent = rotuloBotao();
 }
 
 CAMPOS_OBRIGATORIOS.forEach((nome) => {
@@ -240,17 +295,26 @@ async function analisar(rolar) {
 }
 
 function escolher(id, rotulo) {
+  ensinar = true;
   if (id === "nao-autuar-cnh" || id === "nao-extintor") {
     especiais.add(id);
   } else if (!escolhidos.has(id)) {
     escolhidos.set(id, { id, titulo: rotulo || id, artigo: "" });
     desenharEscolhidos();
   }
+  if (camposObrigatoriosOk()) analisar(false);
 }
 
 function desenhar(dado, rolar) {
   const infracoes = (dado.infracoes || []).map(carta).join("");
   const procedimentos = (dado.procedimentos || []).map(carta).join("");
+  const apoio = !(dado.infracoes || []).length && (dado.opcoes_texto || []).length ? `
+    <article class="duvida">
+      <h3>Não fechei sozinho</h3>
+      <p>Clique no que aconteceu. Eu guardo esse jeito de escrever e, na próxima, reconheço sozinho.</p>
+      ${dado.opcoes_texto.map((opcao) => `<button type="button" class="opcao" data-id="${esc(opcao.id)}">${esc(opcao.titulo)}</button>`).join("")}
+    </article>
+  ` : "";
   const duvidas = (dado.duvidas || []).map((duvida) => `
     <article class="duvida">
       <h3>Confirme antes de autuar</h3>
@@ -268,7 +332,10 @@ function desenhar(dado, rolar) {
     ? `<article class="aviso nao-imprime"><h3>Ainda falta no auto</h3><p>${esc(auto.faltando.join(", "))}.</p></article>`
     : `<article class="aviso"><h3>Dados do art. 280 preenchidos</h3><p>${esc(auto.prontos.join(", "))}.</p></article>`;
 
+  const leitura = String(dado.resposta || "").split(/\n\n+/).filter(Boolean)
+    .map((paragrafo) => `<p>${esc(paragrafo)}</p>`).join("");
   resultadoEl.innerHTML = `
+    ${leitura ? `<article class="leitura"><h2>Resposta</h2>${leitura}</article>` : ""}
     <div class="faixa destino-${esc(dado.destino.tipo)}">
       <h2>${esc(dado.destino.titulo)}</h2>
       <p class="resumo">${esc(dado.resumo)}</p>
@@ -276,6 +343,7 @@ function desenhar(dado, rolar) {
     <ol class="plano">${plano}</ol>
     ${faltaAuto}
     ${duvidas}
+    ${apoio}
     ${orientacoes}
     ${alertas}
     ${procedimentos}
@@ -308,7 +376,11 @@ function desenhar(dado, rolar) {
 }
 
 function carta(item) {
-  const pontos = item.orientacao ? "Sem pontos neste passo" : `${item.pontos} pontos`;
+  const pontos = item.orientacao || item.lanca_pontos === false
+    ? "Sem pontos na CNH"
+    : item.lanca_pontos === "confirmar"
+      ? `${item.pontos} pontos, a confirmar`
+      : `${item.pontos} pontos`;
   const fator = item.multiplicador > 1 ? ` <span>×${item.multiplicador}</span>` : "";
   const suspensao = item.suspensao ? `<p><strong>Penalidade além da multa.</strong> ${esc(item.suspensao)}.</p>` : "";
   const conduta = (item.conduta || []).map((passo) => `<li>${esc(passo)}</li>`).join("");

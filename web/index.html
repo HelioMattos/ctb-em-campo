@@ -11,16 +11,16 @@
     <div class="topo-interno">
       <p class="selo">Apoio ao agente</p>
       <h1>CTB em Campo</h1>
-      <p class="linha">Descreva o que encontrou no veículo. O sistema indica o artigo, a multa, os pontos e se cabe reter, remover ou recolher documento.</p>
+      <p class="linha">Escreva o que aconteceu, em um texto, ou marque palavras-chave. O sistema lê o fato e indica o artigo, a multa, os pontos e se cabe reter, remover ou recolher documento.</p>
     </div>
   </header>
 
   <main class="miolo">
     <form id="abordagem" class="painel">
-      <ol class="passos">
-        <li>Escreva o que viu, com as suas palavras.</li>
-        <li>Quando aparecerem opções, inclua cada achado. Pode ser mais de um, como sem CNH e álcool.</li>
-        <li>Preencha local, data e hora, placa e matrícula. O resultado sai ao clicar em Ver o que fazer.</li>
+      <ol class="passos" id="passos">
+        <li>Escreva o que aconteceu, como você contaria o fato.</li>
+        <li>O sistema lê o texto, separa o que dá para confirmar e responde com artigo, multa e medida.</li>
+        <li>Preencha local, data e hora, placa e matrícula. A resposta sai ao clicar em Analisar o texto.</li>
       </ol>
 
       <fieldset>
@@ -43,9 +43,19 @@
         </div>
       </fieldset>
 
-      <label class="bloco">O que encontrou
-        <textarea name="relato" rows="5" placeholder="Comece a escrever. Ex.: sem CNH e sob efeito de álcool"></textarea>
+      <fieldset>
+        <legend>Como contar o fato</legend>
+        <div class="tipos" role="radiogroup" aria-label="Forma de consulta">
+          <label><input type="radio" name="modo" value="texto" checked> Escrever um texto</label>
+          <label><input type="radio" name="modo" value="palavras"> Palavras-chave</label>
+        </div>
+      </fieldset>
+
+      <label class="bloco">
+        <span id="rotulo-relato">Texto da abordagem</span>
+        <textarea name="relato" rows="8" placeholder="Conte o que viu. Ex.: o condutor não possui CNH, o passageiro estava sem cinto e o licenciamento do veículo estava vencido."></textarea>
       </label>
+      <p class="dica" id="dica-modo">O sistema lê esse texto e responde. Você não precisa escolher o artigo.</p>
       <div id="sugestoes" class="sugestoes" hidden></div>
       <div id="escolhidos" class="escolhidos"></div>
       <button type="button" class="texto" id="exemplo">Preencher um exemplo</button>
@@ -58,7 +68,7 @@
       <label class="cheque"><input type="checkbox" name="reincidencia_alcool"> Já houve álcool ou recusa de teste nos últimos 12 meses</label>
 
       <div class="acoes">
-        <button type="submit" class="principal" id="analisar" disabled>Ver o que fazer</button>
+        <button type="submit" class="principal" id="analisar" disabled>Analisar o texto</button>
         <button type="button" class="secundario" id="limpar">Limpar</button>
       </div>
       <p class="aviso-botao" id="falta-dados">Preencha local, data e hora, placa e matrícula para liberar o botão.</p>
@@ -66,14 +76,14 @@
 
     <section id="resultado" class="resultado" aria-live="polite">
       <div class="vazio">
-        <h2>A conduta aparece aqui</h2>
-        <p>Ela aparece depois de Ver o que fazer, com local, data e hora, placa e matrícula preenchidos.</p>
+        <h2>A resposta aparece aqui</h2>
+        <p>Escreva o texto da abordagem, ou use palavras-chave. Preencha local, data e hora, placa e matrícula.</p>
       </div>
     </section>
   </main>
 
   <footer>
-    <p>Apoio à decisão com base na Lei 9.503/1997 e alterações usadas nesta versão, inclusive as Leis 13.281/2016, 13.855/2019, 14.071/2020 e 14.229/2021. Valores do art. 258 ainda sem correção do CONTRAN pelo art. 319-A. Não substitui o Código, as resoluções do CONTRAN nem o manual do seu órgão.</p>
+    <p>Apoio à decisão com base na Lei 9.503/1997, nas alterações usadas nesta versão (Leis 13.281/2016, 13.855/2019, 14.071/2020 e 14.229/2021) e no Manual Brasileiro de Fiscalização de Trânsito de 2022. Valores do art. 258 ainda sem correção do CONTRAN pelo art. 319-A. Não substitui o Código, as resoluções do CONTRAN nem o manual do seu órgão.</p>
   </footer>
   <script src="/app.js"></script>
 </body>
