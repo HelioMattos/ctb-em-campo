@@ -238,21 +238,342 @@ document.querySelector("#limpar").addEventListener("click", () => {
   form.data_hora.value = horaLocal();
   form.querySelector("input[value=passeio]").checked = true;
   resultadoEl.innerHTML = `<div class="vazio"><h2>A resposta aparece aqui</h2><p>Escreva o texto ou marque as palavras-chave. Preencha local, data e hora, placa e matrícula.</p></div>`;
+  atualizarPlaca();
+  reiniciarLocal();
   aplicarModo(false);
 });
+
+form.placa.addEventListener("input", atualizarPlaca);
+
+const dicaLocal = document.querySelector("#dica-local");
+const opcoesRua = document.querySelector("#opcoes-rua");
+const listaCidades = document.querySelector("#lista-cidades");
+let municipiosCarregados = [];
+let ruaEscolhida = null;
+let timerRua = 0;
+let ruaSeq = 0;
+let municipioSeq = 0;
+
+function modoAparelho() {
+  return form.modo_local.value === "aparelho";
+}
+
+function definirLocal(texto) {
+  form.local.value = texto || "";
+  form.local.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function limparOpcoesRua() {
+  opcoesRua.hidden = true;
+  opcoesRua.innerHTML = "";
+}
+
+function comporLocal() {
+  if (!ruaEscolhida || !ruaEscolhida.logradouro) {
+    definirLocal("");
+    return;
+  }
+  const numero = form.numero.value.trim();
+  const pedacos = [numero ? `${ruaEscolhida.logradouro}, ${numero}` : ruaEscolhida.logradouro];
+  if (ruaEscolhida.bairro) pedacos.push(ruaEscolhida.bairro);
+  if (ruaEscolhida.cidade && ruaEscolhida.uf) pedacos.push(`${ruaEscolhida.cidade}/${ruaEscolhida.uf}`);
+  if (ruaEscolhida.cep) pedacos.push(`CEP ${ruaEscolhida.cep}`);
+  definirLocal(pedacos.join(", "));
+  dicaLocal.textContent = form.local.value;
+  dicaLocal.classList.add("ok");
+  dicaLocal.classList.remove("erro");
+}
+
+function aplicarModoLocal() {
+  document.querySelector("#painel-aparelho").hidden = !modoAparelho();
+  if (form.local.value) return;
+  dicaLocal.classList.remove("ok", "erro");
+  dicaLocal.textContent = modoAparelho()
+    ? "No celular, a busca usa o GPS. Neste computador, usa a localização do computador. É preciso autorizar."
+    : "Escolha o estado e o município. Ao digitar a rua, as opções vêm da base de CEP dos Correios.";
+}
+
+async function carregarMunicipios() {
+  const uf = form.uf.value;
+  const seq = ++municipioSeq;
+  municipiosCarregados = [];
+  listaCidades.innerHTML = "";
+  form.cidade.value = "";
+  form.cidade.disabled = true;
+  form.rua.value = "";
+  form.rua.disabled = true;
+  ruaEscolhida = null;
+  limparOpcoesRua();
+  definirLocal("");
+  if (!uf) {
+    form.cidade.placeholder = "Escolha o estado antes";
+    return;
+  }
+  form.cidade.placeholder = "Carregando municípios…";
+  try {
+    const resposta = await fetch("/api/municipios?uf=" + encodeURIComponent(uf));
+    const dado = await resposta.json();
+    if (seq !== municipioSeq) return;
+    if (dado.erro) {
+      dicaLocal.textContent = dado.erro;
+      dicaLocal.classList.add("erro");
+      form.cidade.placeholder = "Não foi possível carregar";
+      return;
+    }
+    municipiosCarregados = dado.municipios || [];
+    listaCidades.innerHTML = municipiosCarregados.map((nome) => `<option value="${esc(nome)}"></option>`).join("");
+    form.cidade.disabled = false;
+    form.cidade.placeholder = "Digite o município";
+    dicaLocal.classList.remove("erro");
+    dicaLocal.textContent = "Agora o município e, em seguida, o começo da rua.";
+  } catch (erro) {
+    if (seq !== municipioSeq) return;
+    form.cidade.placeholder = "Não foi possível carregar";
+    dicaLocal.textContent = "Não consegui carregar os municípios.";
+    dicaLocal.classList.add("erro");
+  }
+}
+
+function cidadeValida() {
+  const nome = form.cidade.value.trim().toLocaleLowerCase("pt-BR");
+  if (!nome) return "";
+  return municipiosCarregados.find((item) => item.toLocaleLowerCase("pt-BR") === nome) || "";
+}
+
+function liberarRua() {
+  const ok = Boolean(form.uf.value && cidadeValida());
+  form.rua.disabled = !ok;
+  if (!ok) {
+    form.rua.value = "";
+    ruaEscolhida = null;
+    limparOpcoesRua();
+    definirLocal("");
+  }
+}
+
+async function buscarRuas() {
+  const cidade = cidadeValida();
+  const texto = form.rua.value.trim();
+  const seq = ++ruaSeq;
+  if (ruaEscolhida && texto === ruaEscolhida.logradouro) {
+    limparOpcoesRua();
+    comporLocal();
+    return;
+  }
+  ruaEscolhida = null;
+  definirLocal("");
+  if (!cidade || texto.length < 3) {
+    limparOpcoesRua();
+    if (cidade && texto.length > 0) dicaLocal.textContent = "Digite pelo menos 3 letras da rua.";
+    return;
+  }
+  try {
+    const url = "/api/ruas?uf=" + encodeURIComponent(form.uf.value)
+      + "&cidade=" + encodeURIComponent(cidade)
+      + "&q=" + encodeURIComponent(texto);
+    const resposta = await fetch(url);
+    if (seq !== ruaSeq) return;
+    const dado = await resposta.json();
+    const opcoes = dado.opcoes || [];
+    if (!opcoes.length) {
+      limparOpcoesRua();
+      dicaLocal.textContent = dado.erro || "Nenhuma rua com esse nome nesse município.";
+      dicaLocal.classList.add("erro");
+      dicaLocal.classList.remove("ok");
+      return;
+    }
+    dicaLocal.classList.remove("erro");
+    dicaLocal.textContent = "Escolha a rua na lista.";
+    opcoesRua.hidden = false;
+    opcoesRua.innerHTML = opcoes.map((item, indice) => `
+      <button type="button" data-rua="${indice}">
+        ${esc(item.logradouro)}
+        <small>${esc([item.bairro, item.cep].filter(Boolean).join(" · "))}</small>
+      </button>
+    `).join("");
+    opcoesRua._itens = opcoes;
+    opcoesRua.querySelectorAll("[data-rua]").forEach((botaoRua) => {
+      botaoRua.addEventListener("click", () => {
+        ruaEscolhida = opcoesRua._itens[Number(botaoRua.dataset.rua)];
+        form.rua.value = ruaEscolhida.logradouro;
+        limparOpcoesRua();
+        comporLocal();
+      });
+    });
+  } catch (erro) {
+    if (seq !== ruaSeq) return;
+    dicaLocal.textContent = "Não consegui consultar as ruas agora.";
+    dicaLocal.classList.add("erro");
+  }
+}
+
+function usarAparelho() {
+  if (!navigator.geolocation) {
+    dicaLocal.textContent = "Este navegador não informa a localização. Digite o endereço.";
+    dicaLocal.classList.add("erro");
+    return;
+  }
+  dicaLocal.classList.remove("ok", "erro");
+  dicaLocal.textContent = "Buscando a localização do aparelho…";
+  navigator.geolocation.getCurrentPosition(async (posicao) => {
+    try {
+      const resposta = await fetch(
+        "/api/onde?lat=" + encodeURIComponent(posicao.coords.latitude)
+        + "&lon=" + encodeURIComponent(posicao.coords.longitude)
+      );
+      const dado = await resposta.json();
+      if (dado.erro) {
+        dicaLocal.textContent = dado.erro;
+        dicaLocal.classList.add("erro");
+        return;
+      }
+      if (dado.uf) {
+        form.uf.value = dado.uf;
+        await carregarMunicipios();
+      }
+      if (dado.cidade) {
+        form.cidade.value = dado.cidade;
+        form.cidade.disabled = false;
+      }
+      form.rua.disabled = false;
+      form.rua.value = dado.logradouro || "";
+      form.numero.value = dado.numero || "";
+      ruaEscolhida = {
+        logradouro: dado.logradouro || "",
+        bairro: dado.bairro || "",
+        cep: dado.cep || "",
+        cidade: dado.cidade || form.cidade.value,
+        uf: dado.uf || form.uf.value,
+      };
+      if (ruaEscolhida.logradouro) comporLocal();
+      else definirLocal(dado.local || "");
+      dicaLocal.textContent = form.local.value
+        ? `${form.local.value}. Confira a rua e o número.`
+        : "Achei o ponto, mas confira o endereço.";
+      dicaLocal.classList.add("ok");
+      dicaLocal.classList.remove("erro");
+    } catch (erro) {
+      dicaLocal.textContent = "Não consegui transformar o ponto em endereço. Digite a rua.";
+      dicaLocal.classList.add("erro");
+    }
+  }, () => {
+    dicaLocal.textContent = "A localização não foi autorizada ou não pôde ser lida. Digite o endereço.";
+    dicaLocal.classList.add("erro");
+  }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 });
+}
+
+function reiniciarLocal() {
+  municipiosCarregados = [];
+  listaCidades.innerHTML = "";
+  ruaEscolhida = null;
+  limparOpcoesRua();
+  form.cidade.disabled = true;
+  form.cidade.placeholder = "Escolha o estado antes";
+  form.rua.disabled = true;
+  form.local.value = "";
+  form.querySelector("input[name=modo_local][value=manual]").checked = true;
+  document.querySelector("#painel-aparelho").hidden = true;
+  dicaLocal.classList.remove("ok", "erro");
+  dicaLocal.textContent = "Escolha o estado e o município. Ao digitar a rua, as opções vêm da base de CEP dos Correios.";
+  atualizarBotao();
+}
+
+form.querySelectorAll("input[name=modo_local]").forEach((radio) => {
+  radio.addEventListener("change", aplicarModoLocal);
+});
+form.uf.addEventListener("change", carregarMunicipios);
+form.cidade.addEventListener("input", () => {
+  liberarRua();
+  if (cidadeValida()) dicaLocal.textContent = "Digite o começo da rua para ver as opções.";
+});
+form.rua.addEventListener("input", () => {
+  clearTimeout(timerRua);
+  timerRua = setTimeout(buscarRuas, 280);
+});
+form.numero.addEventListener("input", () => {
+  if (ruaEscolhida) comporLocal();
+});
+document.querySelector("#usar-local").addEventListener("click", usarAparelho);
+aplicarModoLocal();
 
 const faltaDadosEl = document.querySelector("#falta-dados");
 const CAMPOS_OBRIGATORIOS = ["local", "data_hora", "placa", "agente"];
 let consultando = false;
 
+function placaBrasil(valor) {
+  const bruto = String(valor || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const letrasMercosul = "ABCDEFGHJKLMNPRSTUVWXYZ";
+  let cru = "";
+  for (const caractere of bruto) {
+    const posicao = cru.length;
+    if (posicao >= 7) break;
+    if (posicao < 3) {
+      if (caractere >= "A" && caractere <= "Z") cru += caractere;
+    } else if (posicao === 3) {
+      if (caractere >= "0" && caractere <= "9") cru += caractere;
+    } else if (posicao === 4) {
+      if (caractere >= "0" && caractere <= "9") cru += caractere;
+      else if (letrasMercosul.includes(caractere)) cru += caractere;
+    } else if (caractere >= "0" && caractere <= "9") {
+      cru += caractere;
+    }
+  }
+  const mercosul = cru.length >= 5 && cru[4] >= "A" && cru[4] <= "Z";
+  if (mercosul) {
+    const letrasOk = [...cru.slice(0, 3), cru[4]].every((letra) => letrasMercosul.includes(letra));
+    const valida = cru.length === 7 && letrasOk;
+    let aviso = "Placa Mercosul. Faltam números.";
+    if (!letrasOk) aviso = "Placa Mercosul não usa as letras I, O nem Q.";
+    else if (valida) aviso = "Placa Mercosul.";
+    return { cru, exibicao: cru, tipo: "mercosul", valida, aviso };
+  }
+  if (cru.length >= 5) {
+    const valida = cru.length === 7;
+    return {
+      cru,
+      exibicao: `${cru.slice(0, 3)}-${cru.slice(3)}`,
+      tipo: "antiga",
+      valida,
+      aviso: valida ? "Placa antiga." : "Placa antiga. Faltam números.",
+    };
+  }
+  let aviso = "Antiga: ABC-1234. Mercosul: ABC1D23.";
+  if (cru.length > 0 && cru.length < 3) aviso = "Comece com 3 letras.";
+  else if (cru.length === 3) aviso = "Agora um número.";
+  else if (cru.length === 4) aviso = "Letra em seguida: Mercosul. Número: placa antiga.";
+  return { cru, exibicao: cru, tipo: "", valida: false, aviso };
+}
+
+function atualizarPlaca() {
+  const campo = form.placa;
+  const info = placaBrasil(campo.value);
+  if (campo.value !== info.exibicao) campo.value = info.exibicao;
+  const dica = document.querySelector("#dica-placa");
+  dica.textContent = info.aviso;
+  dica.classList.toggle("ok", info.valida);
+  dica.classList.toggle("erro", Boolean(info.cru) && info.cru.length === 7 && !info.valida);
+  campo.setCustomValidity(info.valida || !info.cru ? "" : "Informe a placa inteira, antiga ou Mercosul.");
+}
+
 function camposObrigatoriosOk() {
-  return CAMPOS_OBRIGATORIOS.every((nome) => String(form.elements[nome].value || "").trim());
+  return CAMPOS_OBRIGATORIOS.every((nome) => {
+    const valor = String(form.elements[nome].value || "").trim();
+    if (!valor) return false;
+    if (nome === "placa") return placaBrasil(valor).valida;
+    return true;
+  });
 }
 
 function atualizarBotao() {
   const ok = camposObrigatoriosOk();
+  const placa = placaBrasil(form.placa.value);
   botao.disabled = consultando || !ok;
   faltaDadosEl.hidden = ok || consultando;
+  if (placa.cru && !placa.valida) {
+    faltaDadosEl.textContent = "Complete a placa no padrão antigo (ABC-1234) ou Mercosul (ABC1D23).";
+  } else {
+    faltaDadosEl.textContent = "Preencha local, data e hora, placa e matrícula para liberar o botão.";
+  }
   if (!consultando) botao.textContent = rotuloBotao();
 }
 
@@ -376,11 +697,15 @@ function desenhar(dado, rolar) {
 }
 
 function carta(item) {
-  const pontos = item.orientacao || item.lanca_pontos === false
+  const pontos = item.orientacao
     ? "Sem pontos na CNH"
     : item.lanca_pontos === "confirmar"
       ? `${item.pontos} pontos, a confirmar`
-      : `${item.pontos} pontos`;
+      : item.lanca_pontos === false && ["165", "165-a", "165-b", "165-b-exame"].includes(item.id)
+        ? `Não computável: os ${item.pontos_tabela} pontos não entram na CNH`
+        : item.lanca_pontos === false
+          ? "Sem pontos na CNH"
+          : `${item.pontos} pontos na CNH`;
   const fator = item.multiplicador > 1 ? ` <span>×${item.multiplicador}</span>` : "";
   const suspensao = item.suspensao ? `<p><strong>Penalidade além da multa.</strong> ${esc(item.suspensao)}.</p>` : "";
   const conduta = (item.conduta || []).map((passo) => `<li>${esc(passo)}</li>`).join("");

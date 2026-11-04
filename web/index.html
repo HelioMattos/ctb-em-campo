@@ -25,10 +25,71 @@
 
       <fieldset>
         <legend>Dados do auto</legend>
+        <div class="local-bloco">
+          <p class="rotulo-campo">Local da abordagem</p>
+          <div class="tipos" role="radiogroup" aria-label="Como informar o local">
+            <label><input type="radio" name="modo_local" value="manual" checked> Digitar o endereço</label>
+            <label><input type="radio" name="modo_local" value="aparelho"> Localização do aparelho</label>
+          </div>
+          <div id="painel-aparelho" hidden>
+            <button type="button" class="secundario" id="usar-local">Buscar onde estou</button>
+          </div>
+          <div id="painel-manual">
+            <div class="grade">
+              <label>Estado
+                <select name="uf" id="uf">
+                  <option value="">Selecione</option>
+                  <option value="AC">Acre</option>
+                  <option value="AL">Alagoas</option>
+                  <option value="AM">Amazonas</option>
+                  <option value="AP">Amapá</option>
+                  <option value="BA">Bahia</option>
+                  <option value="CE">Ceará</option>
+                  <option value="DF">Distrito Federal</option>
+                  <option value="ES">Espírito Santo</option>
+                  <option value="GO">Goiás</option>
+                  <option value="MA">Maranhão</option>
+                  <option value="MG">Minas Gerais</option>
+                  <option value="MS">Mato Grosso do Sul</option>
+                  <option value="MT">Mato Grosso</option>
+                  <option value="PA">Pará</option>
+                  <option value="PB">Paraíba</option>
+                  <option value="PE">Pernambuco</option>
+                  <option value="PI">Piauí</option>
+                  <option value="PR">Paraná</option>
+                  <option value="RJ">Rio de Janeiro</option>
+                  <option value="RN">Rio Grande do Norte</option>
+                  <option value="RO">Rondônia</option>
+                  <option value="RR">Roraima</option>
+                  <option value="RS">Rio Grande do Sul</option>
+                  <option value="SC">Santa Catarina</option>
+                  <option value="SE">Sergipe</option>
+                  <option value="SP">São Paulo</option>
+                  <option value="TO">Tocantins</option>
+                </select>
+              </label>
+              <label>Município
+                <input name="cidade" id="cidade" list="lista-cidades" autocomplete="off" placeholder="Escolha o estado antes" disabled>
+                <datalist id="lista-cidades"></datalist>
+              </label>
+            </div>
+            <label class="busca-rua">Rua
+              <input name="rua" id="rua" autocomplete="off" placeholder="Digite a rua para ver as opções" disabled>
+              <div id="opcoes-rua" class="opcoes-rua" hidden></div>
+            </label>
+            <label>Número
+              <input name="numero" id="numero" inputmode="numeric" autocomplete="off" placeholder="Se houver">
+            </label>
+          </div>
+          <p class="dica-placa" id="dica-local">Escolha o estado e o município. Ao digitar a rua, as opções vêm da base de CEP dos Correios.</p>
+          <input type="hidden" name="local" id="local">
+        </div>
         <div class="grade">
-          <label>Local<input name="local" autocomplete="off" required placeholder="Via, número, município"></label>
           <label>Data e hora<input name="data_hora" type="datetime-local" required></label>
-          <label>Placa<input name="placa" autocomplete="off" required placeholder="ABC1D23"></label>
+          <label>Placa
+            <input name="placa" autocomplete="off" required maxlength="8" spellcheck="false" autocapitalize="characters" placeholder="ABC1D23 ou ABC-1234" aria-describedby="dica-placa">
+            <span class="dica-placa" id="dica-placa">Antiga: ABC-1234. Mercosul: ABC1D23.</span>
+          </label>
           <label>Matrícula<input name="agente" autocomplete="off" required placeholder="Matrícula do agente"></label>
         </div>
       </fieldset>

@@ -58,7 +58,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 40px;
 fieldset { border: 0; margin: 16px 0; padding: 0; }
 legend { font-weight: 700; margin-bottom: 8px; }
 label { display: grid; gap: 6px; font-size: 14px; font-weight: 650; }
-input, textarea {
+input, textarea, select {
   font: inherit;
   font-weight: 450;
   color: var(--tinta);
@@ -141,6 +141,40 @@ button { font: inherit; cursor: pointer; border-radius: 12px; border: 0; }
 .principal:hover { background: var(--marinho-2); }
 .principal:disabled { background: #8d9aa3; cursor: not-allowed; }
 .aviso-botao, .dica { margin: 8px 0 0; color: #6d6256; font-size: 14px; line-height: 1.45; }
+.dica-placa { color: #6d6256; font-size: 13px; font-weight: 650; line-height: 1.35; }
+.dica-placa.ok { color: var(--ok); }
+.dica-placa.erro { color: var(--gravissima); }
+.local-bloco { display: grid; gap: 8px; margin-bottom: 10px; }
+.rotulo-campo { margin: 0; font-weight: 700; }
+.busca-rua { position: relative; }
+.opcoes-rua {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  top: calc(100% - 4px);
+  background: #fff;
+  border: 1px solid #cbbfaa;
+  border-radius: 10px;
+  max-height: 220px;
+  overflow: auto;
+  box-shadow: var(--sombra);
+}
+.opcoes-rua[hidden] { display: none; }
+.opcoes-rua button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  color: var(--tinta);
+  border: 0;
+  border-bottom: 1px solid var(--linha);
+  border-radius: 0;
+  padding: 10px 12px;
+  min-height: 0;
+}
+.opcoes-rua button small { display: block; color: #6d6256; font-weight: 650; }
+.opcoes-rua button:hover { background: #f7f1e6; }
 .aviso-botao[hidden] { display: none; }
 .leitura {
   margin: 12px;

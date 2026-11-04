@@ -637,6 +637,48 @@ def montar_plano(cartas: list[dict], destino: dict, contexto: dict, alertas: lis
     return passos
 
 
+_LETRAS_MERCOSUL = set("ABCDEFGHJKLMNPRSTUVWXYZ")
+
+
+def classificar_placa(valor: str) -> dict:
+    """Aceita só a placa antiga (ABC-1234) e a Mercosul (ABC1D23)."""
+    bruto = re.sub(r"[^A-Za-z0-9]", "", valor or "").upper()
+    cru = []
+    for caractere in bruto:
+        posicao = len(cru)
+        if posicao >= 7:
+            break
+        if posicao < 3:
+            if caractere.isalpha():
+                cru.append(caractere)
+        elif posicao == 3:
+            if caractere.isdigit():
+                cru.append(caractere)
+        elif posicao == 4:
+            if caractere.isdigit() or (caractere.isalpha() and caractere not in "IOQ"):
+                cru.append(caractere)
+        elif caractere.isdigit():
+            cru.append(caractere)
+    texto = "".join(cru)
+    mercosul = len(texto) >= 5 and texto[4].isalpha()
+    if mercosul:
+        letras_ok = all(letra in _LETRAS_MERCOSUL for letra in texto[:3]) and texto[4] in _LETRAS_MERCOSUL
+        return {
+            "cru": texto,
+            "exibicao": texto,
+            "tipo": "mercosul",
+            "valida": len(texto) == 7 and letras_ok,
+        }
+    if len(texto) >= 5:
+        return {
+            "cru": texto,
+            "exibicao": f"{texto[:3]}-{texto[3:]}",
+            "tipo": "antiga",
+            "valida": len(texto) == 7,
+        }
+    return {"cru": texto, "exibicao": texto, "tipo": "", "valida": False}
+
+
 def campos_do_auto(contexto: dict) -> dict:
     nomes = [
         ("local", "local da abordagem"),
@@ -647,7 +689,14 @@ def campos_do_auto(contexto: dict) -> dict:
     prontos = []
     faltando = []
     for chave, rotulo in nomes:
-        if str(contexto.get(chave, "")).strip():
+        valor = str(contexto.get(chave, "")).strip()
+        if chave == "placa":
+            if classificar_placa(valor)["valida"]:
+                prontos.append(rotulo)
+            else:
+                faltando.append(rotulo)
+            continue
+        if valor:
             prontos.append(rotulo)
         else:
             faltando.append(rotulo)
@@ -674,6 +723,7 @@ def carta_de(info: dict, origem: str, porque: str, reincidencia: bool, excesso_k
         }[info["natureza"]],
         "multiplicador": mult,
         "pontos": pontos,
+        "pontos_tabela": PONTOS[info["natureza"]],
         "lanca_pontos": info["lanca_pontos"],
         "valor": "Sem multa neste passo" if info.get("orientacao") else moeda(centavos),
         "valor_centavos": centavos,
@@ -693,6 +743,23 @@ def carta_de(info: dict, origem: str, porque: str, reincidencia: bool, excesso_k
         "orientacao": bool(info.get("orientacao")),
         "sanavel_no_local": info["sanavel_no_local"],
     }
+
+
+_SEM_PONTOS_NA_CNH = {"165", "165-a", "165-b", "165-b-exame"}
+
+
+def _frase_pontos(carta: dict) -> str:
+    if carta["id"] == "167-p" and carta["pontos"]:
+        return f" Os {carta['pontos']} pontos, se a pessoa for identificada e habilitada, ficam com o passageiro."
+    if carta["lanca_pontos"] is True and carta["pontos"]:
+        return f" Lança {carta['pontos']} pontos na CNH."
+    if carta["id"] in _SEM_PONTOS_NA_CNH:
+        return (
+            f" É {carta['natureza_rotulo'].lower()}, mas a pontuação é não computável: "
+            f"os {carta['pontos_tabela']} pontos não entram na CNH. "
+            f"Na carteira, a penalidade é a suspensão ({carta['suspensao']})."
+        )
+    return " Não lança ponto na CNH do condutor."
 
 
 def redigir_resposta(
@@ -717,12 +784,7 @@ def redigir_resposta(
     if reais:
         frases = []
         for carta in reais:
-            if carta["id"] == "167-p" and carta["pontos"]:
-                pontos_txt = f" Os {carta['pontos']} pontos, se a pessoa for identificada e habilitada, ficam com o passageiro."
-            elif carta["lanca_pontos"] is True and carta["pontos"]:
-                pontos_txt = f" Lança {carta['pontos']} pontos."
-            else:
-                pontos_txt = " Não lança ponto na CNH do condutor."
+            pontos_txt = _frase_pontos(carta)
             if carta["origem"] == "agente":
                 evidencia = "Você marcou este achado."
             else:
@@ -912,6 +974,12 @@ def _texto_pontos(pontos: int, confirmar: bool, reais: list[dict], pontos_passag
     if confirmar:
         extra += " Há infração em que o lançamento de pontos precisa de confirmação no RENACH."
     if pontos == 0 and reais:
+        if any(c["id"] in _SEM_PONTOS_NA_CNH for c in reais):
+            extra += (
+                " A gravíssima do art. 165, do art. 165-A ou do exame do art. 165-B "
+                "tem pontuação não computável: os 7 pontos não entram na CNH. "
+                "Na carteira, a penalidade é a suspensão do direito de dirigir."
+            )
         return "Nenhum ponto de condutor somado nesta abordagem." + extra
     return (
         f"{pontos} ponto(s) de infração de responsabilidade do condutor, se a CNH estiver válida para lançamento. "
@@ -924,11 +992,15 @@ def _texto_pontos(pontos: int, confirmar: bool, reais: list[dict], pontos_passag
 def _resumo(reais: list[dict], destino: dict, total: int, pontos: int) -> str:
     if not reais:
         return "Nenhuma multa fechada. Se o fato ficou genérico, responda à pergunta da tela ou marque o achado no quadro."
-    return f"{len(reais)} infração(ões), {moeda(total)} em multas, {pontos} ponto(s) de condutor. Conduta do veículo: {destino['titulo']}."
+    texto = f"{len(reais)} infração(ões), {moeda(total)} em multas, {pontos} ponto(s) de condutor."
+    if any(c["id"] in _SEM_PONTOS_NA_CNH for c in reais):
+        texto += " A gravíssima de álcool não lança os 7 pontos: a pontuação é não computável, e a carteira recebe a suspensão."
+    return f"{texto} Conduta do veículo: {destino['titulo']}."
 
 
 def _observacao(contexto: dict, reais: list[dict], destino: dict) -> str:
-    placa = (contexto.get("placa") or "não informada").strip()
+    info_placa = classificar_placa(contexto.get("placa") or "")
+    placa = info_placa["exibicao"] if info_placa["valida"] else "não informada"
     local = (contexto.get("local") or "local não informado").strip()
     quando = (contexto.get("data_hora") or "data e hora não informadas").strip()
     fatos = "; ".join(f"{c['artigo_legivel']} ({c['titulo']})" for c in reais) or "nenhum enquadramento confirmado"

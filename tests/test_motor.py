@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ctb.motor import analisar, sugerir
+from ctb.motor import analisar, classificar_placa, sugerir
 
 
 def ids(pedido):
@@ -212,13 +212,42 @@ class Enquadramento(unittest.TestCase):
         carta = resultado["infracoes"][0]
         self.assertEqual(carta["valor_centavos"], 29347 * 10)
         self.assertEqual(carta["pontos"], 0)
+        self.assertEqual(carta["pontos_tabela"], 7)
         self.assertEqual(resultado["destino"]["tipo"], "habilitado")
         self.assertIn("art. 165", resultado["resposta"])
+        self.assertIn("não computável", resultado["resposta"])
+        self.assertIn("os 7 pontos não entram na CNH", resultado["resposta"])
+        self.assertIn("suspensão", resultado["resposta"])
 
     def test_texto_ambiguo_nao_escolhe_sozinho(self):
         resultado = analisar({"relato": "O condutor estava sem CNH."})
         self.assertEqual(resultado["infracoes"], [])
         self.assertIn("não escolhi sozinho", resultado["resposta"])
+
+    def test_placa_aceita_so_os_dois_padroes_brasileiros(self):
+        antiga = classificar_placa("abc1234")
+        self.assertTrue(antiga["valida"])
+        self.assertEqual(antiga["tipo"], "antiga")
+        self.assertEqual(antiga["exibicao"], "ABC-1234")
+        mercosul = classificar_placa("abc1d23")
+        self.assertTrue(mercosul["valida"])
+        self.assertEqual(mercosul["tipo"], "mercosul")
+        self.assertEqual(mercosul["exibicao"], "ABC1D23")
+        self.assertFalse(classificar_placa("ABC1D2")["valida"])
+        self.assertFalse(classificar_placa("AB12D23")["valida"])
+        self.assertNotIn("I", classificar_placa("ABC1I23")["cru"])
+        self.assertFalse(classificar_placa("IOA1B23")["valida"])
+        resultado = analisar({
+            "relato": "farol queimado",
+            "contexto": {"local": "via", "data_hora": "2026-11-04T07:30", "placa": "abc1234", "agente": "1"},
+        })
+        self.assertNotIn("placa do veículo", resultado["auto"]["faltando"])
+        self.assertIn("ABC-1234", resultado["observacao_sugerida"])
+        incompleta = analisar({
+            "relato": "farol queimado",
+            "contexto": {"local": "via", "data_hora": "2026-11-04T07:30", "placa": "ABC12", "agente": "1"},
+        })
+        self.assertIn("placa do veículo", incompleta["auto"]["faltando"])
 
     def test_sinais_de_alcool_nao_multam_ainda(self):
         resultado = analisar({"relato": "Cheiro de álcool e fala alterada."})

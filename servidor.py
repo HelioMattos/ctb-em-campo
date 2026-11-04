@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from ctb.endereco import endereco_por_coordenada, municipios, ruas
 from ctb.motor import analisar, catalogo, sugerir
 
 RAIZ = Path(__file__).resolve().parent
@@ -38,6 +39,18 @@ class Pedido(BaseHTTPRequestHandler):
             if tipo not in ("passeio", "moto", "carga", "coletivo"):
                 tipo = "passeio"
             self._json(sugerir(consulta, tipo=tipo))
+            return
+        if caminho == "/api/municipios":
+            qs = parse_qs(urlparse(self.path).query)
+            self._json(municipios(qs.get("uf", [""])[0]))
+            return
+        if caminho == "/api/ruas":
+            qs = parse_qs(urlparse(self.path).query)
+            self._json(ruas(qs.get("uf", [""])[0], qs.get("cidade", [""])[0], qs.get("q", [""])[0]))
+            return
+        if caminho == "/api/onde":
+            qs = parse_qs(urlparse(self.path).query)
+            self._json(endereco_por_coordenada(qs.get("lat", [""])[0], qs.get("lon", [""])[0]))
             return
         if caminho in ("/", "/index.html"):
             self._arquivo(WEB / "index.html")
