@@ -73,6 +73,17 @@ class Enquadramento(unittest.TestCase):
     def test_motorista_sem_cinto_nao_vira_moto(self):
         self.assertEqual(ids({"relato": "Motorista sem cinto."}), {"167-c"})
 
+    def test_cinto_com_palavras_no_meio_e_crianca_na_frente(self):
+        relato = (
+            "motorista sem estava se o cinto de seguranca "
+            "e com uma crianca no banco da frente menor que 10 anos"
+        )
+        self.assertEqual(ids({"relato": relato}), {"167-c", "168"})
+
+    def test_cinto_afivelado_ou_outro_sem_nao_vira_falta_de_cinto(self):
+        self.assertNotIn("167-c", ids({"relato": "Motorista estava com o cinto de seguranca."}))
+        self.assertNotIn("167-c", ids({"relato": "Motorista sem documento e usava o cinto."}))
+
     def test_excesso_de_peso(self):
         resultado = analisar({"itens": ["231-v"], "excesso_kg": 500})
         self.assertEqual(resultado["infracoes"][0]["valor_centavos"], 13016 + 3 * 532)

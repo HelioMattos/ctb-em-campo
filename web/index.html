@@ -57,7 +57,7 @@
                   <option value="PE">Pernambuco</option>
                   <option value="PI">Piauí</option>
                   <option value="PR">Paraná</option>
-                  <option value="RJ">Rio de Janeiro</option>
+                  <option value="RJ" selected>Rio de Janeiro</option>
                   <option value="RN">Rio Grande do Norte</option>
                   <option value="RO">Rondônia</option>
                   <option value="RR">Roraima</option>
@@ -69,7 +69,7 @@
                 </select>
               </label>
               <label>Município
-                <input name="cidade" id="cidade" list="lista-cidades" autocomplete="off" placeholder="Escolha o estado antes" disabled>
+                <input name="cidade" id="cidade" list="lista-cidades" autocomplete="off" value="Saquarema" placeholder="Saquarema" disabled>
                 <datalist id="lista-cidades"></datalist>
               </label>
             </div>
@@ -81,7 +81,7 @@
               <input name="numero" id="numero" inputmode="numeric" autocomplete="off" placeholder="Se houver">
             </label>
           </div>
-          <p class="dica-placa" id="dica-local">Escolha o estado e o município. Ao digitar a rua, as opções vêm da base de CEP dos Correios.</p>
+          <p class="dica-placa" id="dica-local">O trabalho está em Saquarema/RJ. Digite a rua. As opções vêm da base de CEP dos Correios.</p>
           <input type="hidden" name="local" id="local">
         </div>
         <div class="grade">
@@ -89,9 +89,46 @@
           <label>Placa
             <input name="placa" autocomplete="off" required maxlength="8" spellcheck="false" autocapitalize="characters" placeholder="ABC1D23 ou ABC-1234" aria-describedby="dica-placa">
             <span class="dica-placa" id="dica-placa">Antiga: ABC-1234. Mercosul: ABC1D23.</span>
+            <a class="dica-placa" href="https://www.detran.rj.gov.br/consultas/consultas-drv/cadastro-de-veiculo.html" target="_blank" rel="noopener">Abrir a consulta oficial do DETRAN-RJ</a>
           </label>
           <label>Matrícula<input name="agente" autocomplete="off" required placeholder="Matrícula do agente"></label>
         </div>
+        <div class="grade">
+          <label>Número do auto<input name="numero_auto" autocomplete="off" placeholder="O número impresso no talão"></label>
+          <label>Espécie
+            <input name="especie" id="especie" list="lista-especies" autocomplete="off" value="AUTOMÓVEL">
+            <datalist id="lista-especies">
+              <option value="PASSAGEIRO"></option>
+              <option value="CARGA"></option>
+              <option value="MISTO"></option>
+              <option value="AUTOMÓVEL"></option>
+              <option value="MOTOCICLETA"></option>
+              <option value="CAMINHÃO"></option>
+              <option value="ÔNIBUS"></option>
+            </datalist>
+          </label>
+          <label>Marca / modelo<input name="marca" autocomplete="off" placeholder="Como na consulta"></label>
+        </div>
+        <div class="grade">
+          <label>Cor<input name="cor" autocomplete="off"></label>
+          <label>Combustível<input name="combustivel" autocomplete="off"></label>
+          <label>Ano<input name="ano_veiculo" autocomplete="off" placeholder="Fabricação/modelo"></label>
+          <label>Categoria<input name="categoria" autocomplete="off"></label>
+          <label>Licenciamento<input name="licenciamento" autocomplete="off"></label>
+          <label>Proprietário na consulta<input name="proprietario" autocomplete="off" placeholder="Não substitui o condutor"></label>
+        </div>
+        <label class="bloco">Resultado da consulta
+          <textarea name="consulta_detran" rows="5" placeholder="No DETRAN, selecione o resultado, copie e cole aqui."></textarea>
+        </label>
+        <button type="button" class="secundario" id="colar-detran">Colocar esses dados no auto</button>
+        <p class="dica-placa" id="dica-detran">A consulta continua no site do DETRAN. A colagem preenche o auto com o que você copiou.</p>
+        <div class="grade">
+          <label>Condutor<input name="condutor" autocomplete="off" placeholder="Nome, se identificado"></label>
+          <label>Nº registro CNH<input name="cnh" autocomplete="off"></label>
+          <label>UF da CNH<input name="uf_cnh" maxlength="2" autocapitalize="characters" placeholder="RJ"></label>
+          <label>CPF<input name="cpf" inputmode="numeric" autocomplete="off"></label>
+        </div>
+        <p class="dica-placa">Esses campos entram no auto de Saquarema. O número continua o do talão: o sistema não cria numeração.</p>
       </fieldset>
 
       <fieldset>
@@ -141,6 +178,7 @@
         <p>Escreva o texto da abordagem, ou use palavras-chave. Preencha local, data e hora, placa e matrícula.</p>
       </div>
     </section>
+    <section id="auto-impresso" hidden></section>
   </main>
 
   <footer>

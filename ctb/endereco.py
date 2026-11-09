@@ -75,15 +75,23 @@ def _baixar(url: str, timeout: int = 8) -> object:
 def municipios(uf: str) -> dict:
     sigla = (uf or "").strip().upper()
     if sigla not in UFS:
-        return {"erro": "Escolha o estado.", "municipios": []}
+        return {"erro": "Escolha o estado.", "municipios": [], "codigos": {}}
     try:
         dados = _baixar(
             f"https://servicodados.ibge.gov.br/api/v1/localidades/estados/{sigla}/municipios?orderBy=nome"
         )
     except (URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError, OSError):
-        return {"erro": "Não consegui carregar os municípios agora.", "municipios": []}
-    nomes = [item.get("nome", "") for item in dados if item.get("nome")]
-    return {"erro": "", "municipios": nomes}
+        return {"erro": "Não consegui carregar os municípios agora.", "municipios": [], "codigos": {}}
+    nomes = []
+    codigos = {}
+    for item in dados:
+        nome = item.get("nome") or ""
+        if not nome:
+            continue
+        nomes.append(nome)
+        if item.get("id") is not None:
+            codigos[nome] = str(item["id"])
+    return {"erro": "", "municipios": nomes, "codigos": codigos}
 
 
 def ruas(uf: str, cidade: str, consulta: str) -> dict:

@@ -212,8 +212,21 @@ form.relato.addEventListener("input", () => {
   timerSugestao = setTimeout(buscarSugestoes, 180);
 });
 
+const ESPECIE_POR_TIPO = {
+  passeio: "AUTOMÓVEL",
+  moto: "MOTOCICLETA",
+  carga: "CAMINHÃO",
+  coletivo: "ÔNIBUS",
+};
+let especieManual = false;
+
+form.especie.addEventListener("input", () => {
+  especieManual = true;
+});
+
 form.querySelectorAll("input[name=tipo_veiculo]").forEach((radio) => {
   radio.addEventListener("change", () => {
+    if (!especieManual) form.especie.value = ESPECIE_POR_TIPO[tipoAtual()] || "AUTOMÓVEL";
     tirarIncompativeis();
     buscarSugestoes();
   });
@@ -238,6 +251,9 @@ document.querySelector("#limpar").addEventListener("click", () => {
   form.data_hora.value = horaLocal();
   form.querySelector("input[value=passeio]").checked = true;
   resultadoEl.innerHTML = `<div class="vazio"><h2>A resposta aparece aqui</h2><p>Escreva o texto ou marque as palavras-chave. Preencha local, data e hora, placa e matrícula.</p></div>`;
+  document.querySelector("#auto-impresso").hidden = true;
+  document.querySelector("#auto-impresso").innerHTML = "";
+  especieManual = false;
   atualizarPlaca();
   reiniciarLocal();
   aplicarModo(false);
@@ -249,6 +265,7 @@ const dicaLocal = document.querySelector("#dica-local");
 const opcoesRua = document.querySelector("#opcoes-rua");
 const listaCidades = document.querySelector("#lista-cidades");
 let municipiosCarregados = [];
+let codigosMunicipio = {};
 let ruaEscolhida = null;
 let timerRua = 0;
 let ruaSeq = 0;
@@ -289,26 +306,33 @@ function aplicarModoLocal() {
   if (form.local.value) return;
   dicaLocal.classList.remove("ok", "erro");
   dicaLocal.textContent = modoAparelho()
-    ? "No celular, a busca usa o GPS. Neste computador, usa a localização do computador. É preciso autorizar."
-    : "Escolha o estado e o município. Ao digitar a rua, as opções vêm da base de CEP dos Correios.";
+    ? "No celular, a busca usa o GPS. Neste computador, usa a localização do computador. O município continua Saquarema/RJ."
+    : "O trabalho está em Saquarema/RJ. Digite a rua. As opções vêm da base de CEP dos Correios.";
+}
+
+function fixarSaquarema() {
+  form.uf.value = "RJ";
+  form.uf.disabled = true;
+  form.cidade.value = "Saquarema";
+  form.cidade.disabled = true;
+  form.rua.disabled = !cidadeValida();
 }
 
 async function carregarMunicipios() {
-  const uf = form.uf.value;
+  const uf = "RJ";
   const seq = ++municipioSeq;
   municipiosCarregados = [];
+  codigosMunicipio = {};
   listaCidades.innerHTML = "";
-  form.cidade.value = "";
+  form.uf.value = uf;
+  form.uf.disabled = true;
+  form.cidade.value = "Saquarema";
   form.cidade.disabled = true;
   form.rua.value = "";
   form.rua.disabled = true;
   ruaEscolhida = null;
   limparOpcoesRua();
   definirLocal("");
-  if (!uf) {
-    form.cidade.placeholder = "Escolha o estado antes";
-    return;
-  }
   form.cidade.placeholder = "Carregando municípios…";
   try {
     const resposta = await fetch("/api/municipios?uf=" + encodeURIComponent(uf));
@@ -321,11 +345,12 @@ async function carregarMunicipios() {
       return;
     }
     municipiosCarregados = dado.municipios || [];
+    codigosMunicipio = dado.codigos || {};
     listaCidades.innerHTML = municipiosCarregados.map((nome) => `<option value="${esc(nome)}"></option>`).join("");
-    form.cidade.disabled = false;
-    form.cidade.placeholder = "Digite o município";
+    fixarSaquarema();
+    form.cidade.placeholder = "Saquarema";
     dicaLocal.classList.remove("erro");
-    dicaLocal.textContent = "Agora o município e, em seguida, o começo da rua.";
+    dicaLocal.textContent = "Saquarema/RJ já está definido. Digite a rua.";
   } catch (erro) {
     if (seq !== municipioSeq) return;
     form.cidade.placeholder = "Não foi possível carregar";
@@ -427,23 +452,15 @@ function usarAparelho() {
         dicaLocal.classList.add("erro");
         return;
       }
-      if (dado.uf) {
-        form.uf.value = dado.uf;
-        await carregarMunicipios();
-      }
-      if (dado.cidade) {
-        form.cidade.value = dado.cidade;
-        form.cidade.disabled = false;
-      }
-      form.rua.disabled = false;
+      fixarSaquarema();
       form.rua.value = dado.logradouro || "";
       form.numero.value = dado.numero || "";
       ruaEscolhida = {
         logradouro: dado.logradouro || "",
         bairro: dado.bairro || "",
         cep: dado.cep || "",
-        cidade: dado.cidade || form.cidade.value,
-        uf: dado.uf || form.uf.value,
+        cidade: "Saquarema",
+        uf: "RJ",
       };
       if (ruaEscolhida.logradouro) comporLocal();
       else definirLocal(dado.local || "");
@@ -463,19 +480,14 @@ function usarAparelho() {
 }
 
 function reiniciarLocal() {
-  municipiosCarregados = [];
-  listaCidades.innerHTML = "";
   ruaEscolhida = null;
   limparOpcoesRua();
-  form.cidade.disabled = true;
-  form.cidade.placeholder = "Escolha o estado antes";
-  form.rua.disabled = true;
   form.local.value = "";
   form.querySelector("input[name=modo_local][value=manual]").checked = true;
   document.querySelector("#painel-aparelho").hidden = true;
   dicaLocal.classList.remove("ok", "erro");
-  dicaLocal.textContent = "Escolha o estado e o município. Ao digitar a rua, as opções vêm da base de CEP dos Correios.";
   atualizarBotao();
+  carregarMunicipios();
 }
 
 form.querySelectorAll("input[name=modo_local]").forEach((radio) => {
@@ -495,6 +507,7 @@ form.numero.addEventListener("input", () => {
 });
 document.querySelector("#usar-local").addEventListener("click", usarAparelho);
 aplicarModoLocal();
+carregarMunicipios();
 
 const faltaDadosEl = document.querySelector("#falta-dados");
 const CAMPOS_OBRIGATORIOS = ["local", "data_hora", "placa", "agente"];
@@ -626,6 +639,357 @@ function escolher(id, rotulo) {
   if (camposObrigatoriosOk()) analisar(false);
 }
 
+function partirDataHora(valor) {
+  if (!valor || !valor.includes("T")) return { data: valor || "", hora: "" };
+  const [diaIso, hora] = valor.split("T");
+  const [ano, mes, dia] = diaIso.split("-");
+  return { data: `${dia}/${mes}/${ano}`, hora: (hora || "").slice(0, 5) };
+}
+
+function codigoDoMunicipio() {
+  const nome = cidadeValida();
+  return (nome && codigosMunicipio[nome]) || "";
+}
+
+function logradouroDoAuto() {
+  if (ruaEscolhida && ruaEscolhida.logradouro) {
+    const numero = form.numero.value.trim();
+    const base = numero ? `${ruaEscolhida.logradouro}, ${numero}` : ruaEscolhida.logradouro;
+    return ruaEscolhida.bairro ? `${base}, ${ruaEscolhida.bairro}` : base;
+  }
+  return form.local.value.trim();
+}
+
+function semAcento(texto) {
+  return String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+const ROTULOS_DETRAN = [
+  ["marca", "marca / modelo"],
+  ["marca", "marca/modelo"],
+  ["licenciamento", "licenciamento"],
+  ["proprietario", "proprietario"],
+  ["especie", "especie"],
+  ["combustivel", "combustivel"],
+  ["ano_fabricacao", "ano de fabricacao"],
+  ["ano_modelo", "ano do modelo"],
+  ["categoria", "categoria"],
+  ["municipio", "municipio"],
+  ["cor", "cor"],
+  ["capacidade", "capacidade / potencia / cilindradas"],
+  ["observacoes", "observacoes / restricoes"],
+  ["marca", "marca"],
+].sort((a, b) => b[1].length - a[1].length);
+
+function rotuloDetran(linha) {
+  const base = semAcento(linha).replace(/:$/, "");
+  return ROTULOS_DETRAN.find(([, rotulo]) => base === rotulo || base.startsWith(`${rotulo}:`));
+}
+
+function lerConsultaDetran(bruto) {
+  const linhas = String(bruto || "").split(/\r?\n/).map((linha) => linha.trim()).filter(Boolean);
+  const achados = {};
+  linhas.forEach((linha, indice) => {
+    const item = rotuloDetran(linha);
+    if (!item) return;
+    const [chave, rotulo] = item;
+    const base = semAcento(linha);
+    let valor = "";
+    if (base.startsWith(`${rotulo}:`)) {
+      const corte = linha.indexOf(":");
+      valor = corte >= 0 ? linha.slice(corte + 1).trim() : "";
+    } else if (linhas[indice + 1] && !rotuloDetran(linhas[indice + 1])) {
+      valor = linhas[indice + 1];
+    }
+    if (!valor || valor === "—" || valor === "-" || /^[*]+$/.test(valor)) return;
+    achados[chave] = valor;
+  });
+  return achados;
+}
+
+function complementoVeiculo() {
+  const pedacos = [];
+  if (form.cor.value.trim()) pedacos.push(`cor ${form.cor.value.trim()}`);
+  if (form.combustivel.value.trim()) pedacos.push(`combustível ${form.combustivel.value.trim()}`);
+  if (form.ano_veiculo.value.trim()) pedacos.push(`ano ${form.ano_veiculo.value.trim()}`);
+  if (form.categoria.value.trim()) pedacos.push(`categoria ${form.categoria.value.trim()}`);
+  if (form.licenciamento.value.trim()) pedacos.push(`licenciamento ${form.licenciamento.value.trim()}`);
+  if (form.proprietario.value.trim()) pedacos.push(`proprietário na consulta: ${form.proprietario.value.trim()}`);
+  return pedacos.join(", ");
+}
+
+function colocarConsultaNoAuto() {
+  const dados = lerConsultaDetran(form.consulta_detran.value);
+  const dica = document.querySelector("#dica-detran");
+  if (!dados.marca && !dados.especie && !dados.cor) {
+    dica.textContent = "Não reconheci os dados. Copie o resultado da consulta, com os nomes dos campos, e cole de novo.";
+    dica.classList.add("erro");
+    dica.classList.remove("ok");
+    return;
+  }
+  if (dados.marca) form.marca.value = dados.marca;
+  if (dados.especie) {
+    form.especie.value = dados.especie;
+    especieManual = true;
+  }
+  if (dados.cor) form.cor.value = dados.cor;
+  if (dados.combustivel) form.combustivel.value = dados.combustivel;
+  if (dados.categoria) form.categoria.value = dados.categoria;
+  if (dados.licenciamento) form.licenciamento.value = dados.licenciamento;
+  if (dados.proprietario) form.proprietario.value = dados.proprietario;
+  if (dados.ano_fabricacao || dados.ano_modelo) {
+    form.ano_veiculo.value = dados.ano_fabricacao && dados.ano_modelo && dados.ano_fabricacao !== dados.ano_modelo
+      ? `${dados.ano_fabricacao}/${dados.ano_modelo}`
+      : (dados.ano_fabricacao || dados.ano_modelo);
+  }
+  const postos = [dados.marca, dados.especie, dados.cor, form.ano_veiculo.value].filter(Boolean);
+  dica.textContent = `Entrou no auto: ${postos.join(", ")}. O chassi não é copiado. O proprietário não substitui o condutor.`;
+  dica.classList.add("ok");
+  dica.classList.remove("erro");
+}
+
+document.querySelector("#colar-detran").addEventListener("click", colocarConsultaNoAuto);
+
+function campoAuto(rotulo, valor, largo) {
+  const texto = String(valor || "").trim();
+  return `<div class="auto-campo${largo ? " largo" : ""}"><span>${esc(rotulo)}</span><strong>${esc(texto)}</strong></div>`;
+}
+
+function folhaDoAuto(item) {
+  const placa = placaBrasil(form.placa.value);
+  const quando = partirDataHora(form.data_hora.value);
+  const medicao = item.id.startsWith("218");
+  const obs = [
+    `Veículo placa ${placa.exibicao || "não informada"}, em ${form.local.value.trim() || "local não informado"}, ${quando.data} ${quando.hora}.`,
+    item.tipificacao,
+    `Medida na via: ${item.medida_texto}`,
+    complementoVeiculo(),
+  ].filter(Boolean).join(" ");
+  return `
+    <article class="folha-auto">
+      <header class="auto-topo">
+        <div>
+          <strong>PREFEITURA MUNICIPAL DE SAQUAREMA</strong>
+          <span>AUTO DE INFRAÇÃO E Notificação de Autuação</span>
+        </div>
+        <div class="auto-numero">
+          <span>IDENTIFICAÇÃO DA AUTUAÇÃO</span>
+          <strong>${esc(form.numero_auto.value.trim())}</strong>
+        </div>
+      </header>
+      <section class="auto-secao">
+        <h2>2 - IDENTIFICAÇÃO DO VEÍCULO</h2>
+        <div class="auto-linha">
+          ${campoAuto("PLACA", placa.exibicao)}
+          ${campoAuto("ESPÉCIE", form.especie.value)}
+          ${campoAuto("MARCA", form.marca.value)}
+        </div>
+        <div class="auto-linha">
+          ${campoAuto("COR", form.cor.value)}
+          ${campoAuto("COMBUSTÍVEL", form.combustivel.value)}
+          ${campoAuto("ANO", form.ano_veiculo.value)}
+          ${campoAuto("CATEGORIA", form.categoria.value)}
+        </div>
+      </section>
+      <section class="auto-secao">
+        <h2>3 - IDENTIFICAÇÃO DO CONDUTOR</h2>
+        <div class="auto-linha">${campoAuto("NOME", form.condutor.value, true)}</div>
+        <div class="auto-linha">
+          ${campoAuto("Nº REGISTRO CNH / PPO", form.cnh.value, true)}
+          ${campoAuto("UF", form.uf_cnh.value.toUpperCase())}
+          ${campoAuto("CPF", form.cpf.value)}
+        </div>
+      </section>
+      <section class="auto-secao">
+        <h2>4 - IDENTIFICAÇÃO DO LOCAL, DATA E HORA DO COMETIMENTO DA INFRAÇÃO</h2>
+        <div class="auto-linha">
+          ${campoAuto("LOGRADOURO", logradouroDoAuto(), true)}
+          ${campoAuto("DATA", quando.data)}
+          ${campoAuto("HORA", quando.hora)}
+        </div>
+        <div class="auto-linha">
+          ${campoAuto("CÓD. MUNIC.", codigoDoMunicipio())}
+          ${campoAuto("NOME DO MUNICÍPIO", form.cidade.value, true)}
+          ${campoAuto("UF", form.uf.value)}
+        </div>
+      </section>
+      <section class="auto-secao">
+        <h2>5 - TIPIFICAÇÃO DA INFRAÇÃO</h2>
+        <div class="auto-linha">
+          ${campoAuto("CÓD. / DESD.", item.artigo_legivel)}
+          ${campoAuto("DESCRIÇÃO DA INFRAÇÃO", item.tipificacao, true)}
+        </div>
+        <div class="auto-linha">
+          ${campoAuto("EQUIPAMENTO / INSTRUMENTO DE AFERIÇÃO — Nº", "")}
+          ${campoAuto("MODELO", "")}
+          ${campoAuto("MARCA", "")}
+        </div>
+        <div class="auto-linha">
+          ${campoAuto("MEDIÇÃO REALIZADA", medicao ? form.velocidade_medida.value : "")}
+          ${campoAuto("LIMITE REGULAMENTADO", medicao ? form.velocidade_maxima.value : "")}
+          ${campoAuto("VALOR CONSIDERADO", "")}
+        </div>
+        <p class="auto-obs"><span class="auto-campo" style="padding:0"><span>OBSERVAÇÕES</span></span>${esc(obs)}</p>
+      </section>
+      <section class="auto-secao">
+        <h2>6 - IDENTIFICAÇÃO DA AUTORIDADE OU AGENTE AUTUADOR</h2>
+        <div class="auto-linha">
+          ${campoAuto("Nº DE IDENTIFICAÇÃO", form.agente.value)}
+          ${campoAuto("ASSINATURA DA AUTORIDADE OU AGENTE AUTUADOR", "", true)}
+        </div>
+      </section>
+      <section class="auto-secao">
+        <h2>7 - IDENTIFICAÇÃO DO EMBARCADOR OU EXPEDIDOR</h2>
+        <div class="auto-linha">${campoAuto("NOME", "", true)}</div>
+        <div class="auto-linha">${campoAuto("CPF / CNPJ", "")}</div>
+      </section>
+      <section class="auto-secao">
+        <h2>8 - IDENTIFICAÇÃO DO TRANSPORTADOR</h2>
+        <div class="auto-linha">${campoAuto("NOME", "", true)}</div>
+        <div class="auto-linha">${campoAuto("CPF / CNPJ", "")}</div>
+      </section>
+      <section class="auto-secao">
+        <h2>9 - ASSINATURA DO INFRATOR OU CONDUTOR</h2>
+        <div class="auto-linha">${campoAuto("ASSINATURA", "")}</div>
+      </section>
+      <p class="auto-rodape">OBS. NAS INFRAÇÕES DE RESPONSABILIDADE DO CONDUTOR, QUANDO ESSE ASSINAR O AUTO DE INFRAÇÃO, SERÁ CONSIDERADO NOTIFICADO DA AUTUAÇÃO E TERÁ O PRAZO MÁXIMO DE 15 DIAS PARA APRESENTAÇÃO DA DEFESA PRÉVIA.</p>
+      <p class="auto-vias">1ª VIA SÉPIA PROCESSAMENTO, 2ª VIA VERMELHA USUÁRIO E 3ª VIA VERDE ARQUIVAMENTO</p>
+    </article>
+  `;
+}
+
+const COLUNAS_CUPOM = 32;
+
+function linhasDe(texto) {
+  const palavras = String(texto || "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const linhas = [];
+  let atual = "";
+  palavras.forEach((palavra) => {
+    if (palavra.length > COLUNAS_CUPOM) {
+      if (atual) linhas.push(atual);
+      for (let i = 0; i < palavra.length; i += COLUNAS_CUPOM) linhas.push(palavra.slice(i, i + COLUNAS_CUPOM));
+      atual = "";
+      return;
+    }
+    const proximo = atual ? `${atual} ${palavra}` : palavra;
+    if (proximo.length > COLUNAS_CUPOM) {
+      linhas.push(atual);
+      atual = palavra;
+    } else {
+      atual = proximo;
+    }
+  });
+  if (atual) linhas.push(atual);
+  return linhas;
+}
+
+function centralizarCupom(texto) {
+  const curto = String(texto || "").trim().slice(0, COLUNAS_CUPOM);
+  const margem = Math.max(0, Math.floor((COLUNAS_CUPOM - curto.length) / 2));
+  return `${" ".repeat(margem)}${curto}`;
+}
+
+function campoCupom(rotulo, valor) {
+  const texto = String(valor || "").replace(/\s+/g, " ").trim();
+  if (!texto) return [`${rotulo}:`];
+  const junto = `${rotulo}: ${texto}`;
+  if (junto.length <= COLUNAS_CUPOM) return [junto];
+  return [`${rotulo}:`, ...linhasDe(texto)];
+}
+
+function cupomDoAuto(item) {
+  const placa = placaBrasil(form.placa.value);
+  const quando = partirDataHora(form.data_hora.value);
+  const pontos = item.lanca_pontos === true && item.pontos
+    ? String(item.pontos)
+    : "nao lanca na CNH";
+  const linhas = [
+    centralizarCupom("PREFEITURA DE SAQUAREMA"),
+    centralizarCupom("AUTO DE INFRACAO"),
+    centralizarCupom("Notificacao de Autuacao"),
+    "=".repeat(COLUNAS_CUPOM),
+    ...campoCupom("AUTO", form.numero_auto.value),
+    "-".repeat(COLUNAS_CUPOM),
+    centralizarCupom("VEICULO"),
+    ...campoCupom("PLACA", placa.exibicao),
+    ...campoCupom("ESPECIE", form.especie.value),
+    ...campoCupom("MARCA", form.marca.value),
+    ...(form.cor.value.trim() ? campoCupom("COR", form.cor.value) : []),
+    ...(form.combustivel.value.trim() ? campoCupom("COMB.", form.combustivel.value) : []),
+    ...(form.ano_veiculo.value.trim() ? campoCupom("ANO", form.ano_veiculo.value) : []),
+    ...(form.categoria.value.trim() ? campoCupom("CATEGORIA", form.categoria.value) : []),
+    ...(form.licenciamento.value.trim() ? campoCupom("LICENC.", form.licenciamento.value) : []),
+    ...(form.proprietario.value.trim() ? campoCupom("PROPRIET.", form.proprietario.value) : []),
+    "-".repeat(COLUNAS_CUPOM),
+    centralizarCupom("CONDUTOR"),
+    ...campoCupom("NOME", form.condutor.value),
+    ...campoCupom("CNH", form.cnh.value),
+    ...campoCupom("UF CNH", form.uf_cnh.value.toUpperCase()),
+    ...campoCupom("CPF", form.cpf.value),
+    "-".repeat(COLUNAS_CUPOM),
+    centralizarCupom("LOCAL E HORA"),
+    ...linhasDe(logradouroDoAuto() || form.local.value),
+    ...campoCupom("DATA", quando.data),
+    ...campoCupom("HORA", quando.hora),
+    ...campoCupom("MUNICIPIO", `${form.cidade.value} ${form.uf.value}`.trim()),
+    ...campoCupom("COD.MUNIC", codigoDoMunicipio()),
+    "-".repeat(COLUNAS_CUPOM),
+    centralizarCupom("INFRACAO"),
+    ...campoCupom("CODIGO", item.artigo_legivel),
+    ...linhasDe(item.tipificacao),
+    ...campoCupom("NATUREZA", item.natureza_rotulo),
+    ...campoCupom("MULTA", item.valor),
+    ...campoCupom("PONTOS", pontos),
+  ];
+  if (item.id.startsWith("218")) {
+    linhas.push(...campoCupom("MEDICAO", form.velocidade_medida.value));
+    linhas.push(...campoCupom("LIMITE", form.velocidade_maxima.value));
+  }
+  linhas.push(...linhasDe(`Medida: ${item.medida_texto || ""}`));
+  linhas.push("-".repeat(COLUNAS_CUPOM));
+  linhas.push(...campoCupom("AGENTE", form.agente.value));
+  linhas.push("ASS. AGENTE:");
+  linhas.push("_".repeat(COLUNAS_CUPOM));
+  linhas.push("ASS. INFRATOR:");
+  linhas.push("_".repeat(COLUNAS_CUPOM));
+  linhas.push("-".repeat(COLUNAS_CUPOM));
+  linhas.push(...linhasDe("Se o condutor assinar, fica notificado e tem 15 dias para a defesa previa."));
+  return linhas.map((linha) => linha.slice(0, COLUNAS_CUPOM)).join("\n");
+}
+
+function preencherAuto(dado) {
+  const folhas = (dado.infracoes || []).filter((item) => !item.orientacao);
+  const painel = document.querySelector("#auto-impresso");
+  if (!folhas.length) {
+    painel.hidden = true;
+    painel.innerHTML = "";
+    return;
+  }
+  painel.hidden = false;
+  painel.innerHTML = `
+    <div class="auto-acoes nao-imprime">
+      <p>${folhas.length === 1 ? "Um auto preenchido." : `${folhas.length} autos, um por infração.`} O cupom usa linha mais curta para não cortar a direita na térmica. Embarcador e transportador em branco ficam fora do rolo. O auto largo continua abaixo.</p>
+      <button type="button" class="principal" id="imprimir-cupom">Imprimir cupom</button>
+      <button type="button" class="secundario" id="imprimir-auto">Imprimir o auto largo</button>
+    </div>
+    ${folhas.map((item) => `<pre class="cupom">${esc(cupomDoAuto(item))}</pre>`).join("")}
+    ${folhas.map(folhaDoAuto).join("")}
+  `;
+  document.querySelector("#imprimir-cupom").addEventListener("click", () => {
+    document.body.classList.add("imprimir-cupom");
+    document.body.classList.remove("imprimir-auto");
+    window.print();
+    document.body.classList.remove("imprimir-cupom");
+  });
+  document.querySelector("#imprimir-auto").addEventListener("click", () => {
+    document.body.classList.add("imprimir-auto");
+    document.body.classList.remove("imprimir-cupom");
+    window.print();
+    document.body.classList.remove("imprimir-auto");
+  });
+  painel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function desenhar(dado, rolar) {
   const infracoes = (dado.infracoes || []).map(carta).join("");
   const procedimentos = (dado.procedimentos || []).map(carta).join("");
@@ -677,9 +1041,12 @@ function desenhar(dado, rolar) {
     <h3 style="padding: 8px 18px 0;">Texto para o campo de observações</h3>
     <p class="copiavel" id="obs">${esc(dado.observacao_sugerida)}</p>
     <div class="ferramentas">
+      ${(dado.infracoes || []).length && modoTexto() ? `<button type="button" class="secundario" id="guardar-caso">Guardar este caso para eu aprender</button>` : ""}
       <button type="button" class="secundario" id="copiar">Copiar observações</button>
-      <button type="button" class="secundario" id="imprimir">Imprimir</button>
+      <button type="button" class="secundario" id="imprimir">Imprimir a análise</button>
+      ${(dado.infracoes || []).length ? `<button type="button" class="secundario" id="ver-auto">Preencher o auto</button>` : ""}
     </div>
+    <p class="dica-placa" id="aviso-aprendizado">${dado.aprendizado && dado.aprendizado.casos ? `${dado.aprendizado.casos} caso(s) confirmado(s) no aprendizado local.` : "Nenhum caso confirmado ainda. Quando a resposta estiver certa, guarde o caso."}</p>
   `;
   resultadoEl.querySelectorAll(".opcao").forEach((botaoOpcao) => {
     botaoOpcao.addEventListener("click", () => escolher(botaoOpcao.dataset.id, botaoOpcao.textContent.trim()));
@@ -692,7 +1059,42 @@ function desenhar(dado, rolar) {
       document.querySelector("#copiar").textContent = "Selecione o texto acima";
     }
   });
-  document.querySelector("#imprimir").addEventListener("click", () => window.print());
+  document.querySelector("#imprimir").addEventListener("click", () => {
+    document.body.classList.remove("imprimir-auto");
+    window.print();
+  });
+  const verAuto = document.querySelector("#ver-auto");
+  if (verAuto) verAuto.addEventListener("click", () => preencherAuto(dado));
+  const guardar = document.querySelector("#guardar-caso");
+  if (guardar) {
+    guardar.addEventListener("click", async () => {
+      guardar.disabled = true;
+      guardar.textContent = "Guardando…";
+      try {
+        const resposta = await fetch("/api/aprender", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            relato: form.relato.value,
+            ids: (dado.infracoes || []).map((item) => item.id),
+          }),
+        });
+        const info = await resposta.json();
+        const aviso = document.querySelector("#aviso-aprendizado");
+        if (info.erro) {
+          guardar.disabled = false;
+          guardar.textContent = "Guardar este caso para eu aprender";
+          if (aviso) aviso.textContent = info.erro;
+          return;
+        }
+        guardar.textContent = "Caso guardado";
+        if (aviso) aviso.textContent = `${info.casos} caso(s) confirmado(s) no aprendizado local. Na próxima vez parecida, eu reconheço sozinho.`;
+      } catch (erro) {
+        guardar.disabled = false;
+        guardar.textContent = "Guardar este caso para eu aprender";
+      }
+    });
+  }
   if (rolar) resultadoEl.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 

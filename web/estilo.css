@@ -243,9 +243,93 @@ footer { max-width: 1180px; margin: 0 auto; padding: 0 24px 28px 34px; color: #5
   .grade { grid-template-columns: 1fr; }
 }
 
+.folha-auto {
+  background: white;
+  color: #1a1a1a;
+  border: 2px solid #5a3a12;
+  margin: 18px 0;
+  padding: 10px 12px 8px;
+  font-size: 12px;
+  line-height: 1.25;
+}
+.auto-topo {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 2px solid #5a3a12;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+.auto-topo strong { display: block; font-size: 14px; letter-spacing: 0.02em; }
+.auto-numero { text-align: right; min-width: 180px; }
+.auto-numero strong { font-size: 16px; letter-spacing: 0.08em; }
+.auto-secao { border: 1px solid #5a3a12; margin-top: 6px; }
+.auto-secao h2 {
+  margin: 0;
+  padding: 2px 6px;
+  background: #f3ead8;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+.auto-linha { display: flex; }
+.auto-campo { flex: 1; min-width: 0; padding: 3px 6px 5px; border-top: 1px solid #c8b48a; }
+.auto-campo + .auto-campo { border-left: 1px solid #c8b48a; }
+.auto-campo.largo { flex: 2.4; }
+.auto-campo span { display: block; font-size: 9px; letter-spacing: 0.04em; color: #5c4a32; }
+.auto-campo strong { display: block; min-height: 16px; font-size: 13px; }
+.auto-obs { margin: 0; padding: 6px; min-height: 72px; white-space: pre-wrap; }
+.auto-assina { min-height: 36px; }
+.auto-rodape, .auto-vias { margin: 6px 2px 0; font-size: 9px; }
+.auto-acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.cupom {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
+  line-height: 1.2;
+  width: 32ch;
+  max-width: 100%;
+  margin: 8px 0 18px;
+  padding: 8px 4px;
+  background: white;
+  color: black;
+  border: 1px dashed #8a7b68;
+  white-space: pre-wrap;
+  overflow: visible;
+}
+
 @media print {
   body { background: white; }
-  .topo, .painel, footer, .ferramentas, .nao-imprime { display: none; }
+  .topo, .painel, footer, .ferramentas, .nao-imprime, .auto-acoes { display: none; }
   .miolo { display: block; padding: 0; }
   .resultado, .carta, .duvida, .aviso { box-shadow: none; }
+  body.imprimir-auto .resultado,
+  body.imprimir-cupom .resultado { display: none; }
+  body.imprimir-auto #auto-impresso,
+  body.imprimir-cupom #auto-impresso { display: block !important; }
+  body.imprimir-auto .cupom,
+  body.imprimir-cupom .folha-auto { display: none !important; }
+  .folha-auto { margin: 0 0 8mm; page-break-after: always; border-width: 1.5px; }
+  .folha-auto:last-child { page-break-after: auto; }
+  body.imprimir-cupom {
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+  body.imprimir-cupom .cupom {
+    display: block !important;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.15;
+    width: 32ch;
+    max-width: 52mm;
+    page: cupom;
+    page-break-after: always;
+  }
+  body.imprimir-cupom .cupom:last-of-type { page-break-after: auto; }
+}
+
+@page cupom {
+  size: 58mm auto;
+  margin: 1mm 2mm 1mm 1mm;
 }

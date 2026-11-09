@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from ctb.endereco import endereco_por_coordenada, municipios, ruas
+from ctb.modelo import ensinar, resumo
 from ctb.motor import analisar, catalogo, sugerir
 
 RAIZ = Path(__file__).resolve().parent
@@ -65,7 +66,8 @@ class Pedido(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/analisar":
+        caminho = urlparse(self.path).path
+        if caminho not in ("/api/analisar", "/api/aprender"):
             self.send_error(404)
             return
         tamanho = int(self.headers.get("Content-Length", "0"))
@@ -74,6 +76,10 @@ class Pedido(BaseHTTPRequestHandler):
             pedido = json.loads(bruto or "{}")
         except json.JSONDecodeError:
             self._json({"erro": "Pedido inválido."}, 400)
+            return
+        if caminho == "/api/aprender":
+            ids = pedido.get("ids") if isinstance(pedido.get("ids"), list) else []
+            self._json(ensinar(pedido.get("relato") or "", ids) | resumo())
             return
         self._json(analisar(pedido))
 

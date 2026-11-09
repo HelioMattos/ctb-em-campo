@@ -72,6 +72,34 @@ def alguma_ou_proxima(texto: str, frases: list[str], folga: int = 4) -> str | No
     return None
 
 
+_MEIO_DO_CINTO = {
+    "a", "as", "ainda", "ao", "da", "das", "de", "do", "dos", "e", "ela", "ele",
+    "esta", "estar", "estava", "estavam", "ja", "mais", "mesmo", "na", "no", "o",
+    "os", "por", "proprio", "que", "se", "seguranca", "seu", "sua", "tava",
+    "um", "uma", "usa", "usar", "usava", "usando", "usou", "uso",
+}
+
+
+def cinto_negado(texto: str, folga: int = 5) -> bool:
+    """'sem' e 'cinto' valem mesmo com palavras no meio: 'sem estava se o cinto'."""
+    if "cinto" not in texto:
+        return False
+    negacoes = {"sem", "nao", "desatado", "desabotoado"}
+    palavras = texto.split()
+    for indice, palavra in enumerate(palavras):
+        if palavra != "cinto":
+            continue
+        inicio = max(0, indice - folga)
+        fim = min(len(palavras), indice + folga + 1)
+        for vizinho in range(inicio, fim):
+            if palavras[vizinho] not in negacoes:
+                continue
+            meio = palavras[min(indice, vizinho) + 1: max(indice, vizinho)]
+            if all(item in _MEIO_DO_CINTO for item in meio):
+                return True
+    return False
+
+
 def extrair_medidas(texto_original: str) -> dict:
     """Lê velocidade e excesso de peso quando o agente escreveu os números no texto."""
     texto = normalizar(texto_original)
@@ -282,7 +310,8 @@ def pelo_relato(texto_original: str, tipo: str) -> tuple[dict[str, str], list[di
     # Ocupantes
     fala_de_moto = tipo == "moto" or alguma(texto, ["motocicleta", "motoneta", "ciclomotor", "na moto", "da moto", "de moto"])
     if "cinto" in texto and not fala_de_moto:
-        sem_cinto = alguma(texto, ["sem cinto", "sem o cinto", "nao usava o cinto", "nao usava cinto", "desatado"])
+        frases_cinto = ["sem cinto", "sem o cinto", "nao usava o cinto", "nao usava cinto", "desatado"]
+        sem_cinto = next((frase for frase in frases_cinto if contem(texto, frase)), None) or cinto_negado(texto)
         if sem_cinto:
             cita_passageiro = "passageiro" in texto or "carona" in texto
             if cita_passageiro:
@@ -435,6 +464,10 @@ def pelo_relato(texto_original: str, tipo: str) -> tuple[dict[str, str], list[di
 
     for codigo, porque in aplicar_aprendizado(texto).items():
         add(codigo, porque)
+    from ctb.modelo import prever
+
+    for codigo in prever(texto)["fechar"]:
+        add(codigo, "parecido com um caso que você já confirmou")
 
     return achados, duvidas
 
@@ -858,6 +891,9 @@ def analisar(pedido: dict) -> dict:
             continue
         if pedido.get("aprender") and codigo not in do_texto and codigo in POR_ID:
             lembrar(relato, codigo)
+            from ctb.modelo import ensinar
+
+            ensinar(relato, [codigo])
         if codigo in origens:
             origens[codigo]["origem"] = "agente e relato"
         else:
@@ -937,13 +973,26 @@ def analisar(pedido: dict) -> dict:
 
     resumo = _resumo(reais, destino, total, pontos)
     resposta = redigir_resposta(relato, reais, destino, duvidas, orientacoes, total, pontos, velocidade_incompleta)
+    from ctb.modelo import prever, resumo as resumo_modelo
+
     opcoes_texto = []
     if relato.strip() and not reais and not procedimentos and not duvidas:
-        opcoes_texto = sugerir(relato, limite=4, tipo=tipo)["opcoes"][:4]
+        conhecidas = []
+        for codigo in prever(relato)["sugerir"]:
+            info = POR_ID.get(codigo)
+            if not info:
+                continue
+            conhecidas.append({
+                "id": codigo,
+                "titulo": info["titulo"],
+                "artigo": artigo_legivel(info),
+            })
+        opcoes_texto = (conhecidas + sugerir(relato, limite=4, tipo=tipo)["opcoes"])[:4]
     return {
         "resumo": resumo,
         "resposta": resposta,
         "opcoes_texto": opcoes_texto,
+        "aprendizado": resumo_modelo(),
         "plano": plano,
         "destino": destino,
         "infracoes": reais,
