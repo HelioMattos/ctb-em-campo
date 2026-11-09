@@ -1,0 +1,42 @@
+{
+  "casos": 3,
+  "classes": {
+    "167-c": {
+      "docs": 1,
+      "tok": {
+        "cinto": 1,
+        "seguranca": 1,
+        "crianca": 1,
+        "banco": 1,
+        "frente": 1,
+        "menor": 1,
+        "anos": 1
+      },
+      "total": 7
+    },
+    "168": {
+      "docs": 1,
+      "tok": {
+        "cinto": 1,
+        "seguranca": 1,
+        "crianca": 1,
+        "banco": 1,
+        "frente": 1,
+        "menor": 1,
+        "anos": 1
+      },
+      "total": 7
+    },
+    "165": {
+      "docs": 2,
+      "tok": {
+        "dirigindo": 2,
+        "alcoolizado": 1,
+        "sob": 1,
+        "influencia": 1,
+        "alcool": 1
+      },
+      "total": 6
+    }
+  }
+}
