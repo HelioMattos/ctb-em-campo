@@ -17,12 +17,12 @@ const PASSOS = {
   texto: [
     "Escreva o que aconteceu, como você contaria o fato.",
     "O sistema lê o texto, separa o que dá para confirmar e responde com artigo, multa e medida.",
-    "Preencha local, data e hora, placa e matrícula. A resposta sai ao clicar em Analisar o texto.",
+    "Clique em Analisar o texto. Local, placa e matrícula só entram quando for preencher o auto.",
   ],
   palavras: [
     "Escreva palavras do que viu, como sem CNH ou sem cinto.",
     "Quando aparecerem opções, inclua cada achado. Pode ser mais de um.",
-    "Preencha local, data e hora, placa e matrícula. O resultado sai ao clicar em Ver o que fazer.",
+    "Clique em Ver o que fazer. Sem o texto, a consulta não abre.",
   ],
 };
 
@@ -57,7 +57,7 @@ function aplicarModo(limparEscolhas) {
   const passos = document.querySelector("#passos");
   passos.innerHTML = PASSOS[texto ? "texto" : "palavras"].map((item) => `<li>${item}</li>`).join("");
   document.querySelector("#rotulo-relato").textContent = texto ? "Texto da abordagem" : "Palavras-chave";
-  form.relato.rows = texto ? 8 : 4;
+  form.relato.rows = texto ? 4 : 3;
   form.relato.placeholder = texto
     ? "Conte o que viu. Ex.: o condutor não possui CNH, o passageiro estava sem cinto e o licenciamento do veículo estava vencido."
     : "Comece a escrever. Ex.: sem CNH e sob efeito de álcool";
@@ -83,12 +83,8 @@ function pedido() {
   ensinar = false;
   return {
     relato: dados.get("relato") || "",
-    tipo_veiculo: dados.get("tipo_veiculo"),
+    tipo_veiculo: tipoAtual(),
     itens: [...marcados(), ...especiais],
-    reincidencia_alcool: dados.get("reincidencia_alcool") === "on",
-    velocidade_medida: dados.get("velocidade_medida"),
-    velocidade_maxima: dados.get("velocidade_maxima"),
-    excesso_kg: dados.get("excesso_kg"),
     aprender: agora && modoTexto(),
     contexto: {
       local: dados.get("local"),
@@ -169,7 +165,12 @@ const SEM_MOTO = new Set(["167-c", "167-p", "168", "230-ii", "230-xvi", "230-xix
 const SO_MOTO = new Set(["250-moto", "244-i", "244-ii", "244-iii", "244-v", "244-vii", "244-viii", "244-x", "244-xi"]);
 
 function tipoAtual() {
-  return new FormData(form).get("tipo_veiculo") || "passeio";
+  const texto = semAcento(form.relato.value);
+  if (/\b(motocicleta|motoneta|ciclomotor|moto)\b/.test(texto)) return "moto";
+  if (/\b(onibus|micro-onibus|van|coletivo)\b/.test(texto)) return "coletivo";
+  const especie = form.especie.value;
+  if (especie === "Carga" || especie === "Misto") return "carga";
+  return "passeio";
 }
 
 function compativelComTipo(id) {
@@ -212,24 +213,9 @@ form.relato.addEventListener("input", () => {
   timerSugestao = setTimeout(buscarSugestoes, 180);
 });
 
-const ESPECIE_POR_TIPO = {
-  passeio: "AUTOMÓVEL",
-  moto: "MOTOCICLETA",
-  carga: "CAMINHÃO",
-  coletivo: "ÔNIBUS",
-};
-let especieManual = false;
-
-form.especie.addEventListener("input", () => {
-  especieManual = true;
-});
-
-form.querySelectorAll("input[name=tipo_veiculo]").forEach((radio) => {
-  radio.addEventListener("change", () => {
-    if (!especieManual) form.especie.value = ESPECIE_POR_TIPO[tipoAtual()] || "AUTOMÓVEL";
-    tirarIncompativeis();
-    buscarSugestoes();
-  });
+form.especie.addEventListener("change", () => {
+  tirarIncompativeis();
+  buscarSugestoes();
 });
 
 form.querySelectorAll("input[name=modo]").forEach((radio) => {
@@ -240,6 +226,7 @@ document.querySelector("#exemplo").addEventListener("click", () => {
   form.relato.value = modoTexto() ? EXEMPLO_TEXTO : EXEMPLO;
   form.relato.focus();
   buscarSugestoes();
+  atualizarBotao();
 });
 
 document.querySelector("#limpar").addEventListener("click", () => {
@@ -249,11 +236,10 @@ document.querySelector("#limpar").addEventListener("click", () => {
   desenharEscolhidos();
   sugestoesEl.hidden = true;
   form.data_hora.value = horaLocal();
-  form.querySelector("input[value=passeio]").checked = true;
-  resultadoEl.innerHTML = `<div class="vazio"><h2>A resposta aparece aqui</h2><p>Escreva o texto ou marque as palavras-chave. Preencha local, data e hora, placa e matrícula.</p></div>`;
+  resultadoEl.hidden = true;
+  resultadoEl.innerHTML = "";
   document.querySelector("#auto-impresso").hidden = true;
   document.querySelector("#auto-impresso").innerHTML = "";
-  especieManual = false;
   atualizarPlaca();
   reiniciarLocal();
   aplicarModo(false);
@@ -508,9 +494,9 @@ form.numero.addEventListener("input", () => {
 document.querySelector("#usar-local").addEventListener("click", usarAparelho);
 aplicarModoLocal();
 carregarMunicipios();
+mostrarProximoAuto();
 
 const faltaDadosEl = document.querySelector("#falta-dados");
-const CAMPOS_OBRIGATORIOS = ["local", "data_hora", "placa", "agente"];
 let consultando = false;
 
 function placaBrasil(valor) {
@@ -565,49 +551,38 @@ function atualizarPlaca() {
   dica.textContent = info.aviso;
   dica.classList.toggle("ok", info.valida);
   dica.classList.toggle("erro", Boolean(info.cru) && info.cru.length === 7 && !info.valida);
-  campo.setCustomValidity(info.valida || !info.cru ? "" : "Informe a placa inteira, antiga ou Mercosul.");
+  campo.setCustomValidity("");
 }
 
-function camposObrigatoriosOk() {
-  return CAMPOS_OBRIGATORIOS.every((nome) => {
-    const valor = String(form.elements[nome].value || "").trim();
-    if (!valor) return false;
-    if (nome === "placa") return placaBrasil(valor).valida;
-    return true;
-  });
+function temTexto() {
+  return Boolean(String(form.relato.value || "").trim());
 }
 
 function atualizarBotao() {
-  const ok = camposObrigatoriosOk();
-  const placa = placaBrasil(form.placa.value);
+  const ok = temTexto();
   botao.disabled = consultando || !ok;
   faltaDadosEl.hidden = ok || consultando;
-  if (placa.cru && !placa.valida) {
-    faltaDadosEl.textContent = "Complete a placa no padrão antigo (ABC-1234) ou Mercosul (ABC1D23).";
-  } else {
-    faltaDadosEl.textContent = "Preencha local, data e hora, placa e matrícula para liberar o botão.";
-  }
+  faltaDadosEl.textContent = "Escreva o texto da abordagem para liberar a consulta.";
   if (!consultando) botao.textContent = rotuloBotao();
 }
 
-CAMPOS_OBRIGATORIOS.forEach((nome) => {
-  form.elements[nome].addEventListener("input", atualizarBotao);
-  form.elements[nome].addEventListener("change", atualizarBotao);
-});
+form.relato.addEventListener("input", atualizarBotao);
 atualizarBotao();
 
 form.addEventListener("submit", async (evento) => {
   evento.preventDefault();
-  if (!camposObrigatoriosOk()) return;
+  if (!temTexto()) return;
   await analisar(true);
 });
 
 async function analisar(rolar) {
-  if (!camposObrigatoriosOk()) return;
+  if (!temTexto()) return;
   const seq = ++analiseSeq;
   consultando = true;
   atualizarBotao();
-  botao.textContent = "Consultando o CTB…";
+  botao.textContent = "Pesquisando…";
+  mostrarPesquisa();
+  const inicio = Date.now();
   try {
     const resposta = await fetch("/api/analisar", {
       method: "POST",
@@ -615,9 +590,11 @@ async function analisar(rolar) {
       body: JSON.stringify(pedido()),
     });
     const dado = await resposta.json();
+    await esperarPesquisa(inicio);
     if (seq !== analiseSeq) return;
     desenhar(dado, rolar);
   } catch (erro) {
+    await esperarPesquisa(inicio);
     if (seq !== analiseSeq) return;
     resultadoEl.innerHTML = `<div class="aviso"><h2>Não foi possível consultar</h2><p>O programa local não respondeu. Abra de novo pelo arquivo iniciar.bat.</p></div>`;
   } finally {
@@ -628,6 +605,24 @@ async function analisar(rolar) {
   }
 }
 
+function mostrarPesquisa() {
+  document.querySelector("#auto-impresso").hidden = true;
+  resultadoEl.hidden = false;
+  resultadoEl.innerHTML = `
+    <div class="pesquisa" role="status">
+      <p>Pesquisando no Código de Trânsito…</p>
+      <div class="barra" aria-hidden="true"><span></span></div>
+    </div>
+  `;
+  resultadoEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function esperarPesquisa(inicio) {
+  const falta = 900 - (Date.now() - inicio);
+  if (falta <= 0) return Promise.resolve();
+  return new Promise((resolver) => setTimeout(resolver, falta));
+}
+
 function escolher(id, rotulo) {
   ensinar = true;
   if (id === "nao-autuar-cnh" || id === "nao-extintor") {
@@ -636,7 +631,7 @@ function escolher(id, rotulo) {
     escolhidos.set(id, { id, titulo: rotulo || id, artigo: "" });
     desenharEscolhidos();
   }
-  if (camposObrigatoriosOk()) analisar(false);
+  if (temTexto()) analisar(false);
 }
 
 function partirDataHora(valor) {
@@ -707,42 +702,37 @@ function lerConsultaDetran(bruto) {
   return achados;
 }
 
+const ESPECIES_CONSULTA = {
+  passageiro: "Passageiro",
+  carga: "Carga",
+  misto: "Misto",
+  especial: "Especial",
+};
+
+function especieDaConsulta(valor) {
+  const chave = semAcento(valor).split(/[^a-z]+/).find(Boolean) || "";
+  return ESPECIES_CONSULTA[chave] || "";
+}
+
 function complementoVeiculo() {
-  const pedacos = [];
-  if (form.cor.value.trim()) pedacos.push(`cor ${form.cor.value.trim()}`);
-  if (form.combustivel.value.trim()) pedacos.push(`combustível ${form.combustivel.value.trim()}`);
-  if (form.ano_veiculo.value.trim()) pedacos.push(`ano ${form.ano_veiculo.value.trim()}`);
-  if (form.categoria.value.trim()) pedacos.push(`categoria ${form.categoria.value.trim()}`);
-  if (form.licenciamento.value.trim()) pedacos.push(`licenciamento ${form.licenciamento.value.trim()}`);
-  if (form.proprietario.value.trim()) pedacos.push(`proprietário na consulta: ${form.proprietario.value.trim()}`);
-  return pedacos.join(", ");
+  if (!form.proprietario.value.trim()) return "";
+  return `proprietário na consulta: ${form.proprietario.value.trim()}`;
 }
 
 function colocarConsultaNoAuto() {
   const dados = lerConsultaDetran(form.consulta_detran.value);
   const dica = document.querySelector("#dica-detran");
-  if (!dados.marca && !dados.especie && !dados.cor) {
+  const especie = especieDaConsulta(dados.especie);
+  if (!dados.marca && !especie && !dados.proprietario) {
     dica.textContent = "Não reconheci os dados. Copie o resultado da consulta, com os nomes dos campos, e cole de novo.";
     dica.classList.add("erro");
     dica.classList.remove("ok");
     return;
   }
   if (dados.marca) form.marca.value = dados.marca;
-  if (dados.especie) {
-    form.especie.value = dados.especie;
-    especieManual = true;
-  }
-  if (dados.cor) form.cor.value = dados.cor;
-  if (dados.combustivel) form.combustivel.value = dados.combustivel;
-  if (dados.categoria) form.categoria.value = dados.categoria;
-  if (dados.licenciamento) form.licenciamento.value = dados.licenciamento;
+  if (especie) form.especie.value = especie;
   if (dados.proprietario) form.proprietario.value = dados.proprietario;
-  if (dados.ano_fabricacao || dados.ano_modelo) {
-    form.ano_veiculo.value = dados.ano_fabricacao && dados.ano_modelo && dados.ano_fabricacao !== dados.ano_modelo
-      ? `${dados.ano_fabricacao}/${dados.ano_modelo}`
-      : (dados.ano_fabricacao || dados.ano_modelo);
-  }
-  const postos = [dados.marca, dados.especie, dados.cor, form.ano_veiculo.value].filter(Boolean);
+  const postos = [dados.marca, especie, dados.proprietario].filter(Boolean);
   dica.textContent = `Entrou no auto: ${postos.join(", ")}. O chassi não é copiado. O proprietário não substitui o condutor.`;
   dica.classList.add("ok");
   dica.classList.remove("erro");
@@ -755,10 +745,9 @@ function campoAuto(rotulo, valor, largo) {
   return `<div class="auto-campo${largo ? " largo" : ""}"><span>${esc(rotulo)}</span><strong>${esc(texto)}</strong></div>`;
 }
 
-function folhaDoAuto(item) {
+function folhaDoAuto(item, numero) {
   const placa = placaBrasil(form.placa.value);
   const quando = partirDataHora(form.data_hora.value);
-  const medicao = item.id.startsWith("218");
   const obs = [
     `Veículo placa ${placa.exibicao || "não informada"}, em ${form.local.value.trim() || "local não informado"}, ${quando.data} ${quando.hora}.`,
     item.tipificacao,
@@ -774,7 +763,7 @@ function folhaDoAuto(item) {
         </div>
         <div class="auto-numero">
           <span>IDENTIFICAÇÃO DA AUTUAÇÃO</span>
-          <strong>${esc(form.numero_auto.value.trim())}</strong>
+          <strong>${esc(numero)}</strong>
         </div>
       </header>
       <section class="auto-secao">
@@ -783,12 +772,6 @@ function folhaDoAuto(item) {
           ${campoAuto("PLACA", placa.exibicao)}
           ${campoAuto("ESPÉCIE", form.especie.value)}
           ${campoAuto("MARCA", form.marca.value)}
-        </div>
-        <div class="auto-linha">
-          ${campoAuto("COR", form.cor.value)}
-          ${campoAuto("COMBUSTÍVEL", form.combustivel.value)}
-          ${campoAuto("ANO", form.ano_veiculo.value)}
-          ${campoAuto("CATEGORIA", form.categoria.value)}
         </div>
       </section>
       <section class="auto-secao">
@@ -825,8 +808,8 @@ function folhaDoAuto(item) {
           ${campoAuto("MARCA", "")}
         </div>
         <div class="auto-linha">
-          ${campoAuto("MEDIÇÃO REALIZADA", medicao ? form.velocidade_medida.value : "")}
-          ${campoAuto("LIMITE REGULAMENTADO", medicao ? form.velocidade_maxima.value : "")}
+          ${campoAuto("MEDIÇÃO REALIZADA", "")}
+          ${campoAuto("LIMITE REGULAMENTADO", "")}
           ${campoAuto("VALOR CONSIDERADO", "")}
         </div>
         <p class="auto-obs"><span class="auto-campo" style="padding:0"><span>OBSERVAÇÕES</span></span>${esc(obs)}</p>
@@ -897,7 +880,7 @@ function campoCupom(rotulo, valor) {
   return [`${rotulo}:`, ...linhasDe(texto)];
 }
 
-function cupomDoAuto(item) {
+function cupomDoAuto(item, numero) {
   const placa = placaBrasil(form.placa.value);
   const quando = partirDataHora(form.data_hora.value);
   const pontos = item.lanca_pontos === true && item.pontos
@@ -908,17 +891,12 @@ function cupomDoAuto(item) {
     centralizarCupom("AUTO DE INFRACAO"),
     centralizarCupom("Notificacao de Autuacao"),
     "=".repeat(COLUNAS_CUPOM),
-    ...campoCupom("AUTO", form.numero_auto.value),
+    ...campoCupom("AUTO", numero),
     "-".repeat(COLUNAS_CUPOM),
     centralizarCupom("VEICULO"),
     ...campoCupom("PLACA", placa.exibicao),
     ...campoCupom("ESPECIE", form.especie.value),
     ...campoCupom("MARCA", form.marca.value),
-    ...(form.cor.value.trim() ? campoCupom("COR", form.cor.value) : []),
-    ...(form.combustivel.value.trim() ? campoCupom("COMB.", form.combustivel.value) : []),
-    ...(form.ano_veiculo.value.trim() ? campoCupom("ANO", form.ano_veiculo.value) : []),
-    ...(form.categoria.value.trim() ? campoCupom("CATEGORIA", form.categoria.value) : []),
-    ...(form.licenciamento.value.trim() ? campoCupom("LICENC.", form.licenciamento.value) : []),
     ...(form.proprietario.value.trim() ? campoCupom("PROPRIET.", form.proprietario.value) : []),
     "-".repeat(COLUNAS_CUPOM),
     centralizarCupom("CONDUTOR"),
@@ -941,10 +919,6 @@ function cupomDoAuto(item) {
     ...campoCupom("MULTA", item.valor),
     ...campoCupom("PONTOS", pontos),
   ];
-  if (item.id.startsWith("218")) {
-    linhas.push(...campoCupom("MEDICAO", form.velocidade_medida.value));
-    linhas.push(...campoCupom("LIMITE", form.velocidade_maxima.value));
-  }
   linhas.push(...linhasDe(`Medida: ${item.medida_texto || ""}`));
   linhas.push("-".repeat(COLUNAS_CUPOM));
   linhas.push(...campoCupom("AGENTE", form.agente.value));
@@ -957,7 +931,38 @@ function cupomDoAuto(item) {
   return linhas.map((linha) => linha.slice(0, COLUNAS_CUPOM)).join("\n");
 }
 
-function preencherAuto(dado) {
+const numerosDoResultado = new WeakMap();
+
+async function reservarNumeros(dado, quantidade) {
+  if (numerosDoResultado.has(dado)) return numerosDoResultado.get(dado);
+  const resposta = await fetch("/api/reservar-autos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quantidade }),
+  });
+  if (!resposta.ok) throw new Error("numero");
+  const info = await resposta.json();
+  if (!Array.isArray(info.numeros) || info.numeros.length < quantidade) throw new Error("numero");
+  const numeros = info.numeros.slice(0, quantidade);
+  numerosDoResultado.set(dado, numeros);
+  mostrarProximoAuto();
+  return numeros;
+}
+
+async function mostrarProximoAuto() {
+  const alvo = document.querySelector("#numero-auto");
+  if (!alvo) return;
+  try {
+    const resposta = await fetch("/api/proximo-auto");
+    if (!resposta.ok) return;
+    const info = await resposta.json();
+    if (info.numero) alvo.textContent = info.numero;
+  } catch (erro) {
+    /* o número aparece quando o servidor responder */
+  }
+}
+
+async function preencherAuto(dado) {
   const folhas = (dado.infracoes || []).filter((item) => !item.orientacao);
   const painel = document.querySelector("#auto-impresso");
   if (!folhas.length) {
@@ -965,15 +970,23 @@ function preencherAuto(dado) {
     painel.innerHTML = "";
     return;
   }
+  let numeros;
+  try {
+    numeros = await reservarNumeros(dado, folhas.length);
+  } catch (erro) {
+    painel.hidden = false;
+    painel.innerHTML = `<p class="dica-placa erro">Não consegui gerar o número do auto. Tente de novo.</p>`;
+    return;
+  }
   painel.hidden = false;
   painel.innerHTML = `
     <div class="auto-acoes nao-imprime">
-      <p>${folhas.length === 1 ? "Um auto preenchido." : `${folhas.length} autos, um por infração.`} O cupom usa linha mais curta para não cortar a direita na térmica. Embarcador e transportador em branco ficam fora do rolo. O auto largo continua abaixo.</p>
+      <p>${folhas.length === 1 ? "Um auto preenchido." : `${folhas.length} autos, um por infração.`} O número sai sozinho. O cupom usa linha mais curta para não cortar a direita na térmica. Embarcador e transportador em branco ficam fora do rolo. O auto largo continua abaixo.</p>
       <button type="button" class="principal" id="imprimir-cupom">Imprimir cupom</button>
       <button type="button" class="secundario" id="imprimir-auto">Imprimir o auto largo</button>
     </div>
-    ${folhas.map((item) => `<pre class="cupom">${esc(cupomDoAuto(item))}</pre>`).join("")}
-    ${folhas.map(folhaDoAuto).join("")}
+    ${folhas.map((item, indice) => `<pre class="cupom">${esc(cupomDoAuto(item, numeros[indice]))}</pre>`).join("")}
+    ${folhas.map((item, indice) => folhaDoAuto(item, numeros[indice])).join("")}
   `;
   document.querySelector("#imprimir-cupom").addEventListener("click", () => {
     document.body.classList.add("imprimir-cupom");
@@ -995,8 +1008,8 @@ function desenhar(dado, rolar) {
   const procedimentos = (dado.procedimentos || []).map(carta).join("");
   const apoio = !(dado.infracoes || []).length && (dado.opcoes_texto || []).length ? `
     <article class="duvida">
-      <h3>Não fechei sozinho</h3>
-      <p>Clique no que aconteceu. Eu guardo esse jeito de escrever e, na próxima, reconheço sozinho.</p>
+      <h3>Não achei nada com esse texto</h3>
+      <p>Por acaso é alguma destas opções abaixo?</p>
       ${dado.opcoes_texto.map((opcao) => `<button type="button" class="opcao" data-id="${esc(opcao.id)}">${esc(opcao.titulo)}</button>`).join("")}
     </article>
   ` : "";
@@ -1017,9 +1030,19 @@ function desenhar(dado, rolar) {
     ? `<article class="aviso nao-imprime"><h3>Ainda falta no auto</h3><p>${esc(auto.faltando.join(", "))}.</p></article>`
     : `<article class="aviso"><h3>Dados do art. 280 preenchidos</h3><p>${esc(auto.prontos.join(", "))}.</p></article>`;
 
+  const juntar = (dado.infracoes || []).length ? `
+    <article class="juntar nao-imprime">
+      <h3>Lembrou de outro fato?</h3>
+      <p>Escreva só o que faltou. Ele entra junto com o que já está nesta abordagem.</p>
+      <textarea id="fato-extra" rows="2" placeholder="Ex.: também estava sem cinto"></textarea>
+      <button type="button" class="principal" id="juntar-fato">Juntar nesta abordagem</button>
+    </article>
+  ` : "";
   const leitura = String(dado.resposta || "").split(/\n\n+/).filter(Boolean)
     .map((paragrafo) => `<p>${esc(paragrafo)}</p>`).join("");
   resultadoEl.innerHTML = `
+    ${juntar}
+    ${apoio}
     ${leitura ? `<article class="leitura"><h2>Resposta</h2>${leitura}</article>` : ""}
     <div class="faixa destino-${esc(dado.destino.tipo)}">
       <h2>${esc(dado.destino.titulo)}</h2>
@@ -1028,7 +1051,6 @@ function desenhar(dado, rolar) {
     <ol class="plano">${plano}</ol>
     ${faltaAuto}
     ${duvidas}
-    ${apoio}
     ${orientacoes}
     ${alertas}
     ${procedimentos}
@@ -1051,6 +1073,17 @@ function desenhar(dado, rolar) {
   resultadoEl.querySelectorAll(".opcao").forEach((botaoOpcao) => {
     botaoOpcao.addEventListener("click", () => escolher(botaoOpcao.dataset.id, botaoOpcao.textContent.trim()));
   });
+  const juntarFato = document.querySelector("#juntar-fato");
+  if (juntarFato) {
+    juntarFato.addEventListener("click", () => {
+      const extra = document.querySelector("#fato-extra").value.trim();
+      if (!extra) return;
+      const atual = form.relato.value.trim();
+      form.relato.value = atual ? `${atual}. ${extra}` : extra;
+      form.relato.dispatchEvent(new Event("input", { bubbles: true }));
+      analisar(true);
+    });
+  }
   document.querySelector("#copiar").addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(dado.observacao_sugerida);
@@ -1095,7 +1128,6 @@ function desenhar(dado, rolar) {
       }
     });
   }
-  if (rolar) resultadoEl.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function carta(item) {

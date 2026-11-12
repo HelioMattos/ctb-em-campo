@@ -3,16 +3,83 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CTB em Campo</title>
+  <title>CTB em Campo · Fiscalização de trânsito</title>
   <link rel="stylesheet" href="/estilo.css">
 </head>
 <body>
   <header class="topo">
     <div class="topo-interno">
-      <p class="selo">Apoio ao agente</p>
-      <h1>CTB em Campo</h1>
-      <p class="linha">Escreva o que aconteceu, em um texto, ou marque palavras-chave. O sistema lê o fato e indica o artigo, a multa, os pontos e se cabe reter, remover ou recolher documento.</p>
+      <div class="marca">
+        <svg class="sinal" viewBox="0 0 72 64" aria-hidden="true">
+          <rect x="4" y="10" width="64" height="42" rx="7" fill="#fff" stroke="#111" stroke-width="2"/>
+          <path d="M4 17h64v8H4z" fill="#1b3a4b"/>
+          <circle cx="12" cy="16" r="2" fill="#f0c014"/>
+          <circle cx="60" cy="16" r="2" fill="#f0c014"/>
+          <text x="36" y="44" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="16" font-weight="700" fill="#111">CTB</text>
+        </svg>
+        <div>
+          <p class="selo">Fiscalização de trânsito · Saquarema</p>
+          <h1>CTB em Campo</h1>
+          <p class="linha">Código de Trânsito Brasileiro na abordagem. O texto vira artigo, multa, pontos e a medida na via.</p>
+        </div>
+      </div>
+      <svg class="via-cena" viewBox="0 0 680 78" role="img" aria-label="Via com faixa de pedestre, semáforo, carro, moto e ônibus">
+        <rect width="680" height="78" rx="10" fill="#1c2126"/>
+        <rect width="680" height="12" fill="#3a424c"/>
+        <rect y="66" width="680" height="12" fill="#3a424c"/>
+        <g fill="#f4f7fb">
+          <rect x="16" y="16" width="11" height="46"/>
+          <rect x="34" y="16" width="11" height="46"/>
+          <rect x="52" y="16" width="11" height="46"/>
+          <rect x="70" y="16" width="11" height="46"/>
+          <rect x="88" y="16" width="11" height="46"/>
+        </g>
+        <g>
+          <circle cx="61" cy="24" r="5" fill="#f0c014" stroke="#111" stroke-width="1.2"/>
+          <rect x="56" y="30" width="10" height="12" rx="3" fill="#f0c014" stroke="#111" stroke-width="1.2"/>
+          <path d="M57 42 l-5 16 M65 42 l6 16" fill="none" stroke="#f0c014" stroke-width="2.4" stroke-linecap="round"/>
+        </g>
+        <rect x="118" y="8" width="5" height="62" fill="#8d97a3"/>
+        <rect x="108" y="8" width="25" height="42" rx="3" fill="#111" stroke="#f0c014"/>
+        <circle cx="120.5" cy="18" r="4.5" fill="#6a2424"/>
+        <circle cx="120.5" cy="29" r="4.5" fill="#f0c014"/>
+        <circle cx="120.5" cy="40" r="4.5" fill="#1e4d30"/>
+        <g stroke="#f0c014" stroke-width="3" stroke-dasharray="12 9">
+          <line x1="148" y1="39" x2="184" y2="39"/>
+          <line x1="292" y1="39" x2="352" y2="39"/>
+          <line x1="436" y1="39" x2="466" y2="39"/>
+          <line x1="628" y1="39" x2="666" y2="39"/>
+        </g>
+        <g transform="translate(188,20)">
+          <path d="M6 26 h16 l10-14 h28 l12 14 h18 v12 h-10 a9 9 0 0 1-18 0 h-28 a9 9 0 0 1-18 0 H6 z" fill="#f0c014" stroke="#111" stroke-width="1.4"/>
+          <path d="M34 14 h20 l8 12 H30 z" fill="#d7eef8" stroke="#111" stroke-width="1.2"/>
+          <circle cx="30" cy="38" r="8" fill="#111"/>
+          <circle cx="74" cy="38" r="8" fill="#111"/>
+          <circle cx="30" cy="38" r="3" fill="#f0c014"/>
+          <circle cx="74" cy="38" r="3" fill="#f0c014"/>
+        </g>
+        <g transform="translate(360,24)" fill="none" stroke="#f6f1e7" stroke-width="2.2" stroke-linecap="round">
+          <circle cx="16" cy="32" r="9"/>
+          <circle cx="58" cy="32" r="9"/>
+          <path d="M16 32 h10 l10-16 h14 l8 12" stroke="#f0c014"/>
+          <circle cx="42" cy="10" r="5" fill="#f6f1e7" stroke="#111"/>
+          <path d="M42 15 v12 M36 22 h12"/>
+        </g>
+        <g transform="translate(470,16)">
+          <rect x="0" y="12" width="150" height="30" rx="6" fill="#fff" stroke="#111" stroke-width="1.4"/>
+          <rect x="10" y="18" width="18" height="12" fill="#1b3a4b"/>
+          <rect x="34" y="18" width="18" height="12" fill="#1b3a4b"/>
+          <rect x="58" y="18" width="18" height="12" fill="#1b3a4b"/>
+          <rect x="82" y="18" width="18" height="12" fill="#1b3a4b"/>
+          <rect x="112" y="18" width="22" height="16" rx="2" fill="#d7eef8" stroke="#111"/>
+          <circle cx="32" cy="42" r="8" fill="#111"/>
+          <circle cx="118" cy="42" r="8" fill="#111"/>
+          <circle cx="32" cy="42" r="3" fill="#f0c014"/>
+          <circle cx="118" cy="42" r="3" fill="#f0c014"/>
+        </g>
+      </svg>
     </div>
+    <div class="faixa-via" aria-hidden="true"></div>
   </header>
 
   <main class="miolo">
@@ -20,13 +87,36 @@
       <ol class="passos" id="passos">
         <li>Escreva o que aconteceu, como você contaria o fato.</li>
         <li>O sistema lê o texto, separa o que dá para confirmar e responde com artigo, multa e medida.</li>
-        <li>Preencha local, data e hora, placa e matrícula. A resposta sai ao clicar em Analisar o texto.</li>
+        <li>Clique em Analisar o texto. Local, placa e matrícula só entram quando for preencher o auto.</li>
       </ol>
+      <div class="frente">
+        <div class="frente-fato">
+          <p class="bloco-titulo">O fato</p>
+          <fieldset>
+            <div class="tipos" role="radiogroup" aria-label="Forma de consulta">
+              <label><input type="radio" name="modo" value="texto" checked> Escrever um texto</label>
+              <label><input type="radio" name="modo" value="palavras"> Palavras-chave</label>
+            </div>
+          </fieldset>
+          <label class="bloco">
+            <span id="rotulo-relato">Texto da abordagem</span>
+            <textarea name="relato" rows="4" placeholder="Conte o que viu. Ex.: o condutor não possui CNH, o passageiro estava sem cinto e o licenciamento do veículo estava vencido."></textarea>
+          </label>
+          <p class="dica" id="dica-modo">O sistema lê esse texto e responde. Você não precisa escolher o artigo.</p>
+          <div id="sugestoes" class="sugestoes" hidden></div>
+          <div id="escolhidos" class="escolhidos"></div>
+          <button type="button" class="texto" id="exemplo">Preencher um exemplo</button>
+          <div class="acoes">
+            <button type="submit" class="principal" id="analisar" disabled>Analisar o texto</button>
+            <button type="button" class="secundario" id="limpar">Limpar</button>
+          </div>
+          <p class="aviso-botao" id="falta-dados">Escreva o texto da abordagem para liberar a consulta.</p>
+        </div>
 
-      <fieldset>
-        <legend>Dados do auto</legend>
+      <fieldset class="frente-auto">
+        <div class="frente-meio">
+        <p class="bloco-titulo">O local</p>
         <div class="local-bloco">
-          <p class="rotulo-campo">Local da abordagem</p>
           <div class="tipos" role="radiogroup" aria-label="Como informar o local">
             <label><input type="radio" name="modo_local" value="manual" checked> Digitar o endereço</label>
             <label><input type="radio" name="modo_local" value="aparelho"> Localização do aparelho</label>
@@ -72,53 +162,28 @@
                 <input name="cidade" id="cidade" list="lista-cidades" autocomplete="off" value="Saquarema" placeholder="Saquarema" disabled>
                 <datalist id="lista-cidades"></datalist>
               </label>
+              <label>Número
+                <input name="numero" id="numero" inputmode="numeric" autocomplete="off" placeholder="Se houver">
+              </label>
             </div>
             <label class="busca-rua">Rua
               <input name="rua" id="rua" autocomplete="off" placeholder="Digite a rua para ver as opções" disabled>
               <div id="opcoes-rua" class="opcoes-rua" hidden></div>
             </label>
-            <label>Número
-              <input name="numero" id="numero" inputmode="numeric" autocomplete="off" placeholder="Se houver">
-            </label>
           </div>
           <p class="dica-placa" id="dica-local">O trabalho está em Saquarema/RJ. Digite a rua. As opções vêm da base de CEP dos Correios.</p>
           <input type="hidden" name="local" id="local">
+          <div class="grade par">
+            <label>Data e hora<input name="data_hora" type="datetime-local"></label>
+            <label>Matrícula<input name="agente" autocomplete="off" placeholder="Matrícula do agente"></label>
+          </div>
+          <p class="selo-auto">Próximo auto <strong id="numero-auto">000001</strong> <small>número automático</small></p>
         </div>
-        <div class="grade">
-          <label>Data e hora<input name="data_hora" type="datetime-local" required></label>
-          <label>Placa
-            <input name="placa" autocomplete="off" required maxlength="8" spellcheck="false" autocapitalize="characters" placeholder="ABC1D23 ou ABC-1234" aria-describedby="dica-placa">
-            <span class="dica-placa" id="dica-placa">Antiga: ABC-1234. Mercosul: ABC1D23.</span>
-            <a class="dica-placa" href="https://www.detran.rj.gov.br/consultas/consultas-drv/cadastro-de-veiculo.html" target="_blank" rel="noopener">Abrir a consulta oficial do DETRAN-RJ</a>
-          </label>
-          <label>Matrícula<input name="agente" autocomplete="off" required placeholder="Matrícula do agente"></label>
         </div>
-        <div class="grade">
-          <label>Número do auto<input name="numero_auto" autocomplete="off" placeholder="O número impresso no talão"></label>
-          <label>Espécie
-            <input name="especie" id="especie" list="lista-especies" autocomplete="off" value="AUTOMÓVEL">
-            <datalist id="lista-especies">
-              <option value="PASSAGEIRO"></option>
-              <option value="CARGA"></option>
-              <option value="MISTO"></option>
-              <option value="AUTOMÓVEL"></option>
-              <option value="MOTOCICLETA"></option>
-              <option value="CAMINHÃO"></option>
-              <option value="ÔNIBUS"></option>
-            </datalist>
-          </label>
-          <label>Marca / modelo<input name="marca" autocomplete="off" placeholder="Como na consulta"></label>
-        </div>
-        <div class="grade">
-          <label>Cor<input name="cor" autocomplete="off"></label>
-          <label>Combustível<input name="combustivel" autocomplete="off"></label>
-          <label>Ano<input name="ano_veiculo" autocomplete="off" placeholder="Fabricação/modelo"></label>
-          <label>Categoria<input name="categoria" autocomplete="off"></label>
-          <label>Licenciamento<input name="licenciamento" autocomplete="off"></label>
-          <label>Proprietário na consulta<input name="proprietario" autocomplete="off" placeholder="Não substitui o condutor"></label>
-        </div>
+        <div class="frente-lado">
+        <p class="bloco-titulo">O condutor</p>
         <label class="bloco">Resultado da consulta
-          <textarea name="consulta_detran" rows="5" placeholder="No DETRAN, selecione o resultado, copie e cole aqui."></textarea>
+          <textarea name="consulta_detran" rows="2" placeholder="No DETRAN, selecione o resultado, copie e cole aqui."></textarea>
         </label>
         <button type="button" class="secundario" id="colar-detran">Colocar esses dados no auto</button>
         <p class="dica-placa" id="dica-detran">A consulta continua no site do DETRAN. A colagem preenche o auto com o que você copiou.</p>
@@ -128,56 +193,35 @@
           <label>UF da CNH<input name="uf_cnh" maxlength="2" autocapitalize="characters" placeholder="RJ"></label>
           <label>CPF<input name="cpf" inputmode="numeric" autocomplete="off"></label>
         </div>
-        <p class="dica-placa">Esses campos entram no auto de Saquarema. O número continua o do talão: o sistema não cria numeração.</p>
-      </fieldset>
-
-      <fieldset>
-        <legend>Veículo</legend>
-        <div class="tipos" role="radiogroup" aria-label="Tipo de veículo">
-          <label><input type="radio" name="tipo_veiculo" value="passeio" checked> Passeio</label>
-          <label><input type="radio" name="tipo_veiculo" value="moto"> Moto</label>
-          <label><input type="radio" name="tipo_veiculo" value="carga"> Caminhão</label>
-          <label><input type="radio" name="tipo_veiculo" value="coletivo"> Ônibus ou van</label>
+        <p class="dica-placa">Esses campos entram no auto de Saquarema. Cada infração recebe o próximo número.</p>
         </div>
       </fieldset>
-
-      <fieldset>
-        <legend>Como contar o fato</legend>
-        <div class="tipos" role="radiogroup" aria-label="Forma de consulta">
-          <label><input type="radio" name="modo" value="texto" checked> Escrever um texto</label>
-          <label><input type="radio" name="modo" value="palavras"> Palavras-chave</label>
+      <div class="dados-veiculo">
+        <p class="bloco-titulo">O veículo</p>
+        <div class="linha-veiculo">
+          <label>Placa
+            <input name="placa" autocomplete="off" maxlength="8" spellcheck="false" autocapitalize="characters" placeholder="ABC1D23 ou ABC-1234" aria-describedby="dica-placa">
+          </label>
+          <label>Espécie
+            <select name="especie" id="especie">
+              <option value="Passageiro" selected>Passageiro</option>
+              <option value="Carga">Carga</option>
+              <option value="Misto">Misto</option>
+              <option value="Especial">Especial</option>
+            </select>
+          </label>
+          <label>Marca / modelo<input name="marca" autocomplete="off" placeholder="Como na consulta"></label>
+          <label>Proprietário na consulta<input name="proprietario" autocomplete="off" placeholder="Não substitui o condutor"></label>
         </div>
-      </fieldset>
-
-      <label class="bloco">
-        <span id="rotulo-relato">Texto da abordagem</span>
-        <textarea name="relato" rows="8" placeholder="Conte o que viu. Ex.: o condutor não possui CNH, o passageiro estava sem cinto e o licenciamento do veículo estava vencido."></textarea>
-      </label>
-      <p class="dica" id="dica-modo">O sistema lê esse texto e responde. Você não precisa escolher o artigo.</p>
-      <div id="sugestoes" class="sugestoes" hidden></div>
-      <div id="escolhidos" class="escolhidos"></div>
-      <button type="button" class="texto" id="exemplo">Preencher um exemplo</button>
-
-      <div class="grade">
-        <label>Velocidade medida (km/h)<input name="velocidade_medida" inputmode="decimal" placeholder="Só se houver aparelho"></label>
-        <label>Limite da via (km/h)<input name="velocidade_maxima" inputmode="decimal"></label>
-        <label>Excesso de peso (kg)<input name="excesso_kg" inputmode="numeric" placeholder="Se já foi aferido"></label>
+        <p class="ajuda-placa">
+          <span class="dica-placa" id="dica-placa">Antiga: ABC-1234. Mercosul: ABC1D23.</span>
+          <a href="https://www.detran.rj.gov.br/consultas/consultas-drv/cadastro-de-veiculo.html" target="_blank" rel="noopener">Abrir a consulta oficial do DETRAN-RJ</a>
+        </p>
       </div>
-      <label class="cheque"><input type="checkbox" name="reincidencia_alcool"> Já houve álcool ou recusa de teste nos últimos 12 meses</label>
-
-      <div class="acoes">
-        <button type="submit" class="principal" id="analisar" disabled>Analisar o texto</button>
-        <button type="button" class="secundario" id="limpar">Limpar</button>
-      </div>
-      <p class="aviso-botao" id="falta-dados">Preencha local, data e hora, placa e matrícula para liberar o botão.</p>
+        </div>
     </form>
 
-    <section id="resultado" class="resultado" aria-live="polite">
-      <div class="vazio">
-        <h2>A resposta aparece aqui</h2>
-        <p>Escreva o texto da abordagem, ou use palavras-chave. Preencha local, data e hora, placa e matrícula.</p>
-      </div>
-    </section>
+    <section id="resultado" class="resultado" aria-live="polite" hidden></section>
     <section id="auto-impresso" hidden></section>
   </main>
 
